@@ -271,17 +271,17 @@ class MapViewModel extends ChangeNotifier {
             LatLng target = _currentOrder!.status == OrderStatus.pickingUp
                 ? _currentOrder!.pickupLocation
                 : _currentOrder!.destinationLocation;
-          
+
             double distanceToTarget = Geolocator.distanceBetween(
               position.latitude,
               position.longitude,
               target.latitude,
               target.longitude,
             );
-          
+
             _isAtLocation = distanceToTarget < 50;
             notifyListeners();
-          
+
             _orderService.updateDriverLocation(
               orderId: _currentOrder!.orderId,
               latitude: position.latitude,
