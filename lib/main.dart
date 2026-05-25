@@ -5,9 +5,16 @@ import 'package:deltasend/views/map_driver_screen.dart';
 import 'package:deltasend/viewmodels/map_viewmodel.dart';
 import 'package:firebase_core/firebase_core.dart';
 
+// farell: nambahin import package buat firebase karena pake FlutterFire config
+import 'firebase_options.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  
+  // farell: ubah ini, nyesuaikan import dari firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => MapViewModel())],
