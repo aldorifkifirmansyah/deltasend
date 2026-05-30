@@ -6,7 +6,9 @@ import '../models/order_model.dart';
 import '../viewmodels/map_viewmodel.dart';
 
 class MapDriverScreen extends StatefulWidget {
-  const MapDriverScreen({super.key});
+  final String orderId;
+
+  const MapDriverScreen({super.key, required this.orderId});
 
   @override
   State<MapDriverScreen> createState() => _MapDriverScreenState();
@@ -20,7 +22,7 @@ class _MapDriverScreenState extends State<MapDriverScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final viewModel = context.read<MapViewModel>();
       viewModel.setTickerProvider(this);
-      viewModel.fetchOrderData('order_test_123');
+      viewModel.fetchOrderData(widget.orderId);
       viewModel.initLocation();
     });
   }
