@@ -19,6 +19,16 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
   // orderId yang sedang diproses, biar tombolnya bisa di-disable & loading
   String? _processingOrderId;
 
+  void _openMap(String orderId) {
+    // push (bukan pushReplacement) supaya back dari peta kembali ke daftar ini,
+    // sehingga driver tetap bisa melihat & melanjutkan order aktifnya.
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MapDriverScreen(orderId: orderId),
+      ),
+    );
+  }
+
   Future<void> _ambilOrder(OrderModel order) async {
     if (_processingOrderId != null) return;
 
@@ -31,12 +41,7 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
       );
 
       if (!mounted) return;
-
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => MapDriverScreen(orderId: order.orderId),
-        ),
-      );
+      _openMap(order.orderId);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -51,66 +56,146 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Order Tersedia'),
+        title: const Text('Order Driver'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
       ),
+      // StreamBuilder order aktif membungkus body supaya bagian "Order Tersedia"
+      // tahu apakah driver sudah punya order aktif (untuk disable tombol ambil).
       body: StreamBuilder<List<OrderModel>>(
-        stream: _orderService.watchPendingOrders(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+        stream: _orderService.watchActiveOrdersForDriver(kDummyDriverId),
+        builder: (context, activeSnapshot) {
+          final activeOrders = activeSnapshot.data ?? [];
+          final hasActive = activeOrders.isNotEmpty;
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Text(
-                  'Terjadi kesalahan:\n${snapshot.error}',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
-
-          final orders = snapshot.data ?? [];
-
-          if (orders.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
-                    SizedBox(height: 12),
-                    Text(
-                      'Belum ada order pending',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return ListView.builder(
+          return ListView(
             padding: const EdgeInsets.all(12),
-            itemCount: orders.length,
-            itemBuilder: (context, index) {
-              return _buildOrderCard(orders[index]);
-            },
+            children: [
+              _buildSectionTitle('Order Aktif Saya'),
+              if (activeOrders.length > 1)
+                _buildInfoText(
+                  'Terdeteksi ${activeOrders.length} order aktif (data testing lama). '
+                  'Selesaikan order-order ini; ke depan driver hanya boleh 1 order aktif.',
+                ),
+              _buildActiveContent(activeSnapshot),
+              const SizedBox(height: 20),
+              _buildSectionTitle('Order Tersedia'),
+              _buildPendingOrdersSection(hasActive: hasActive),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildOrderCard(OrderModel order) {
-    final isProcessing = _processingOrderId == order.orderId;
-    final isLocked = _processingOrderId != null;
+  // ===== Bagian 1: Order aktif milik driver =====
+  Widget _buildActiveContent(AsyncSnapshot<List<OrderModel>> snapshot) {
+    if (snapshot.connectionState == ConnectionState.waiting) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
+    if (snapshot.hasError) {
+      return _buildInfoText('Gagal memuat order aktif: ${snapshot.error}');
+    }
+
+    final orders = snapshot.data ?? [];
+    if (orders.isEmpty) {
+      return _buildInfoText('Tidak ada order aktif');
+    }
+
+    return Column(
+      children: orders
+          .map(
+            (order) => _buildOrderCard(
+              order: order,
+              showStatus: true,
+              buttonText: 'Lanjutkan Pengiriman',
+              isProcessing: false,
+              onPressed: () => _openMap(order.orderId),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  // ===== Bagian 2: Order pending yang bisa diambil =====
+  Widget _buildPendingOrdersSection({required bool hasActive}) {
+    return StreamBuilder<List<OrderModel>>(
+      stream: _orderService.watchPendingOrders(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return _buildInfoText('Terjadi kesalahan: ${snapshot.error}');
+        }
+
+        final orders = snapshot.data ?? [];
+        if (orders.isEmpty) {
+          return _buildInfoText('Belum ada order pending');
+        }
+
+        // tombol ambil di-disable jika: driver sudah punya order aktif,
+        // atau salah satu order sedang diproses.
+        final isLocked = hasActive || _processingOrderId != null;
+
+        return Column(
+          children: orders
+              .map(
+                (order) => _buildOrderCard(
+                  order: order,
+                  showStatus: false,
+                  buttonText: hasActive
+                      ? 'Selesaikan order aktif dulu'
+                      : 'Ambil Order',
+                  isProcessing: _processingOrderId == order.orderId,
+                  onPressed:
+                      isLocked ? null : () => _ambilOrder(order),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, top: 2),
+      child: Text(
+        title,
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildInfoText(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.grey),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderCard({
+    required OrderModel order,
+    required bool showStatus,
+    required String buttonText,
+    required bool isProcessing,
+    required VoidCallback? onPressed,
+  }) {
     return Card(
       elevation: 3,
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -120,11 +205,22 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              order.itemDescription.isNotEmpty
-                  ? order.itemDescription
-                  : 'Paket',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    order.itemDescription.isNotEmpty
+                        ? order.itemDescription
+                        : 'Paket',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                if (showStatus) _buildStatusChip(order.status),
+              ],
             ),
             const SizedBox(height: 12),
             _buildLocationRow(
@@ -177,7 +273,7 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: isLocked ? null : () => _ambilOrder(order),
+                onPressed: onPressed,
                 child: isProcessing
                     ? const SizedBox(
                         width: 22,
@@ -187,9 +283,9 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : const Text(
-                        'Ambil Order',
-                        style: TextStyle(
+                    : Text(
+                        buttonText,
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -197,6 +293,29 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(OrderStatus status) {
+    final label = status == OrderStatus.pickingUp
+        ? 'Menjemput'
+        : status == OrderStatus.delivering
+            ? 'Mengantar'
+            : status.name;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Theme.of(context).colorScheme.primary,
         ),
       ),
     );
