@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'utils/theme.dart';
-import 'package:deltasend/views/map_driver_screen.dart';
+import 'package:deltasend/views/driver_order_list_screen.dart';
 import 'package:deltasend/viewmodels/map_viewmodel.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -32,7 +32,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Deltasend',
       theme: appTheme,
-      home: const MapDriverScreen(),
+      home: const DriverOrderListScreen(),
     );
   }
 }

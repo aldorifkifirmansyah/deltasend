@@ -39,4 +39,37 @@ class OrderService {
       'updated_at': FieldValue.serverTimestamp(),
     });
   }
+
+  // 5. method buat listen perubahan order dengan status 'pending'
+  Stream<List<OrderModel>> watchPendingOrders() {
+    return _db
+        .collection('orders')
+        .where('status', isEqualTo: OrderStatus.pending.name)
+        .snapshots()
+        .map((snapshot) {
+      final orders = snapshot.docs.map((doc) {
+        return OrderModel.fromFirestore(doc);
+      }).toList();
+
+      orders.sort((a, b) {
+        final aDate = a.createdAt ?? DateTime(0);
+        final bDate = b.createdAt ?? DateTime(0);
+        return bDate.compareTo(aDate);
+      });
+
+      return orders;
+    });
+  }
+
+  // 6. method buat driver terima order (update driver_id dan status)
+  Future<void> acceptOrder({
+    required String orderId,
+    required String driverId,
+  }) async {
+    await _db.collection('orders').doc(orderId).update({
+      'driver_id': driverId,
+      'status': OrderStatus.pickingUp.name,
+      'updated_at': FieldValue.serverTimestamp(),
+    });
+  }
 }
