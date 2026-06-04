@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+// import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/order_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -8,6 +9,9 @@ import '../models/order_model.dart';
 import '../services/routing_service.dart';
 
 class MapViewModel extends ChangeNotifier {
+  final RoutingService _routingService = RoutingService();
+  final OrderService _orderService = OrderService();
+
   LatLng? _currentLocation;
   List<LatLng> _routePoints = [];
   OrderModel? _currentOrder;
@@ -156,19 +160,21 @@ class MapViewModel extends ChangeNotifier {
 
   Future<void> fetchOrderData(String orderId) async {
     try {
-      var doc = await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(orderId)
-          .get();
+      final order = await _orderService.fetchOrderById(orderId);
 
-      if (doc.exists) {
-        _currentOrder = OrderModel.fromFirestore(doc);
-        notifyListeners();
-
-        if (_currentLocation != null) {
-          loadRoute(_currentLocation!);
-        }
+      if (order == null) {
+        debugPrint('Order dengan ID $orderId tidak ditemukan');
+        return;
       }
+      // if (doc.exists) {
+      //   _currentOrder = OrderModel.fromFirestore(doc);
+      //   notifyListeners();
+
+      //   if (_currentLocation != null) {
+      //     loadRoute(_currentLocation!);
+      //   }
+      // }
+      setOrder(order);
     } catch (e) {
       debugPrint("Gagal fetch order: $e");
     }
@@ -262,7 +268,6 @@ class MapViewModel extends ChangeNotifier {
           }
 
           if (_currentOrder != null) {
-            // Hitung jarak ke titik tujuan saat ini
             LatLng target = _currentOrder!.status == OrderStatus.pickingUp
                 ? _currentOrder!.pickupLocation
                 : _currentOrder!.destinationLocation;
@@ -277,69 +282,70 @@ class MapViewModel extends ChangeNotifier {
             _isAtLocation = distanceToTarget < 50;
             notifyListeners();
 
-            FirebaseFirestore.instance
-                .collection('orders')
-                .doc(_currentOrder!.orderId)
-                .set({
-                  'driver_lat': position.latitude,
-                  'driver_lng': position.longitude,
-                }, SetOptions(merge: true));
+            _orderService.updateDriverLocation(
+              orderId: _currentOrder!.orderId,
+              latitude: position.latitude,
+              longitude: position.longitude,
+            );
           }
         });
   }
 
-  void loadRoute(LatLng start) async {
+  Future<void> loadRoute(LatLng start) async {
     if (_currentOrder == null) return;
 
-    LatLng? targetPoint;
+    LatLng? target;
+
     if (_currentOrder!.status == OrderStatus.pickingUp) {
-      targetPoint = _currentOrder!.pickupLocation;
+      target = _currentOrder!.pickupLocation;
     } else if (_currentOrder!.status == OrderStatus.delivering) {
-      targetPoint = _currentOrder!.destinationLocation;
+      target = _currentOrder!.destinationLocation;
     }
 
-    if (targetPoint == null) return;
-
-    try {
-      final points = await RoutingService().getRoute(start, targetPoint);
-      _routePoints = points;
-      updateCameraBounds();
+    if (target == null) {
+      _routePoints.clear();
       notifyListeners();
-    } catch (e) {
-      debugPrint("Gagal tarik rute: $e");
-    }
-  }
-
-  Future<void> updateStatus() async {
-    if (_currentOrder == null) return;
-
-    OrderStatus nextStatus;
-    if (_currentOrder!.status == OrderStatus.pickingUp) {
-      nextStatus = OrderStatus.delivering;
-    } else if (_currentOrder!.status == OrderStatus.delivering) {
-      nextStatus = OrderStatus.completed;
-    } else {
       return;
     }
 
     try {
-      await FirebaseFirestore.instance
-          .collection('orders')
-          .doc(_currentOrder!.orderId)
-          .update({'status': nextStatus.toString().split('.').last});
-
-      _currentOrder!.status = nextStatus;
-      _isAtLocation = false;
+      _routePoints = await _routingService.getRoute(start, target);
       notifyListeners();
-
-      if (_currentLocation != null && nextStatus != OrderStatus.completed) {
-        loadRoute(_currentLocation!);
-      } else if (nextStatus == OrderStatus.completed) {
-        _routePoints.clear();
-        notifyListeners();
-      }
     } catch (e) {
-      debugPrint("Gagal update status: $e");
+      debugPrint('Gagal load route: $e');
     }
   }
+
+  Future<void> updateStatus() async {
+  if (_currentOrder == null) return;
+
+  OrderStatus? nextStatus;
+
+  if (_currentOrder!.status == OrderStatus.pickingUp) {
+    nextStatus = OrderStatus.delivering;
+  } else if (_currentOrder!.status == OrderStatus.delivering) {
+    nextStatus = OrderStatus.completed;
+  }
+
+  if (nextStatus == null) return;
+
+  try {
+    await _orderService.updateOrderStatus(
+      orderId: _currentOrder!.orderId,
+      status: nextStatus.name,
+    );
+
+    _currentOrder!.status = nextStatus;
+
+    if (nextStatus == OrderStatus.completed) {
+      _routePoints.clear();
+    } else if (_currentLocation != null) {
+      await loadRoute(_currentLocation!);
+    }
+
+    notifyListeners();
+  } catch (e) {
+    debugPrint('Gagal update status order: $e');
+  }
+}
 }
