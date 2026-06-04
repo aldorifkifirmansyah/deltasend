@@ -61,12 +61,74 @@ class OrderService {
     });
   }
 
+  // 5b. method buat listen order aktif milik driver (pickingUp / delivering)
+  Stream<List<OrderModel>> watchActiveOrdersForDriver(String driverId) {
+    // Query cukup filter driver_id (single field, gak butuh composite index).
+    // Filter status & sort dilakukan di memory biar aman dari index Firestore.
+    return _db
+        .collection('orders')
+        .where('driver_id', isEqualTo: driverId)
+        .snapshots()
+        .map((snapshot) {
+      const activeStatuses = {OrderStatus.pickingUp, OrderStatus.delivering};
+
+      final orders = snapshot.docs
+          .map((doc) => OrderModel.fromFirestore(doc))
+          .where((order) => activeStatuses.contains(order.status))
+          .toList();
+
+      orders.sort((a, b) {
+        final aDate = a.updatedAt ?? a.createdAt ?? DateTime(0);
+        final bDate = b.updatedAt ?? b.createdAt ?? DateTime(0);
+        return bDate.compareTo(aDate);
+      });
+
+      return orders;
+    });
+  }
+
+  // 5c. cek apakah driver masih punya order aktif (pickingUp / delivering)
+  Future<bool> hasActiveOrderForDriver(String driverId) async {
+    final snapshot = await _db
+        .collection('orders')
+        .where('driver_id', isEqualTo: driverId)
+        .get();
+
+    const activeStatuses = {OrderStatus.pickingUp, OrderStatus.delivering};
+
+    return snapshot.docs
+        .map((doc) => OrderModel.fromFirestore(doc))
+        .any((order) => activeStatuses.contains(order.status));
+  }
+
   // 6. method buat driver terima order (update driver_id dan status)
   Future<void> acceptOrder({
     required String orderId,
     required String driverId,
   }) async {
-    await _db.collection('orders').doc(orderId).update({
+    // 1. driver gak boleh punya lebih dari 1 order aktif
+    final hasActive = await hasActiveOrderForDriver(driverId);
+    if (hasActive) {
+      throw Exception(
+        'Driver masih memiliki order aktif. Selesaikan order tersebut terlebih dahulu.',
+      );
+    }
+
+    final docRef = _db.collection('orders').doc(orderId);
+    final doc = await docRef.get();
+
+    // 2. order yang mau diambil harus masih ada & masih pending
+    if (!doc.exists) {
+      throw Exception('Order sudah tidak tersedia.');
+    }
+
+    final order = OrderModel.fromFirestore(doc);
+    if (order.status != OrderStatus.pending) {
+      throw Exception('Order sudah tidak tersedia.');
+    }
+
+    // 3. aman → ambil order
+    await docRef.update({
       'driver_id': driverId,
       'status': OrderStatus.pickingUp.name,
       'updated_at': FieldValue.serverTimestamp(),
