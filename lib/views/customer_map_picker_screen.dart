@@ -550,21 +550,21 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildSummaryChip(
-                            label: 'Type',
-                            value: _selectedType == _LocationType.pickup
-                                ? 'Pickup'
-                                : 'Destination',
-                            color: _selectedType == _LocationType.pickup
-                                ? Colors.green
-                                : Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
+                    // Row(
+                    //   children: [
+                    //     Expanded(
+                    //       child: _buildSummaryChip(
+                    //         label: 'Type',
+                    //         value: _selectedType == _LocationType.pickup
+                    //             ? 'Pickup'
+                    //             : 'Destination',
+                    //         color: _selectedType == _LocationType.pickup
+                    //             ? Colors.green
+                    //             : Colors.red,
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -589,42 +589,42 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                         ),
                       ],
                     ),
-                    if (_isSearching) ...[
-                      const SizedBox(height: 12),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 10),
-                          Text('Mencari alamat...'),
-                        ],
-                      ),
-                    ] else if (_isLoadingAddress) ...[
-                      const SizedBox(height: 12),
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 10),
-                          Text('Mengambil alamat lokasi...'),
-                        ],
-                      ),
-                    ] else if (_searchError != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _searchError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
+                    // if (_isSearching) ...[
+                    //   const SizedBox(height: 12),
+                    //   const Row(
+                    //     mainAxisAlignment: MainAxisAlignment.center,
+                    //     children: [
+                    //       SizedBox(
+                    //         width: 18,
+                    //         height: 18,
+                    //         child: CircularProgressIndicator(strokeWidth: 2),
+                    //       ),
+                    //       SizedBox(width: 10),
+                    //       Text('Mencari alamat...'),
+                    //     ],
+                    //   ),
+                    // ] else if (_isLoadingAddress) ...[
+                    //   const SizedBox(height: 12),
+                    //   const Row(
+                    //     mainAxisAlignment: MainAxisAlignment.center,
+                    //     children: [
+                    //       SizedBox(
+                    //         width: 18,
+                    //         height: 18,
+                    //         child: CircularProgressIndicator(strokeWidth: 2),
+                    //       ),
+                    //       SizedBox(width: 10),
+                    //       Text('Mengambil alamat lokasi...'),
+                    //     ],
+                    //   ),
+                    // ] else if (_searchError != null) ...[
+                    //   const SizedBox(height: 12),
+                    //   Text(
+                    //     _searchError!,
+                    //     textAlign: TextAlign.center,
+                    //     style: const TextStyle(color: Colors.red),
+                    //   ),
+                    // ],
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
@@ -711,36 +711,6 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
     );
   }
 
-  Widget _buildSummaryChip({
-    required String label,
-    required String value,
-    Color? color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: color?.withValues(alpha: 0.1) ?? Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color ?? Colors.grey.shade300),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: color ?? Colors.grey,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
 
   Widget _buildLocationPreview(
     String label,
