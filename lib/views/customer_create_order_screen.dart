@@ -4,6 +4,7 @@ import '../services/order_service.dart';
 import '../services/routing_service.dart';
 import '../services/pricing_service.dart';
 import 'customer_map_picker_screen.dart';
+import 'customer_waiting_screen.dart';
 
 // farell: dummy customer id sementara, nanti diganti FirebaseAuth UID setelah login dibuat
 const String kDummyCustomerId = 'customer_test_001';
@@ -204,7 +205,7 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final orderId = await _orderService.createOrder(
+      final newOrderId = await _orderService.createOrder(
         customerId: kDummyCustomerId,
         pickupAddress: _pickupAddress?.trim() ?? '',
         pickupLat: _pickupLat!,
@@ -219,13 +220,11 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Order berhasil dibuat (id: $orderId)'),
-          backgroundColor: Colors.green,
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CustomerWaitingScreen(orderId: newOrderId),
         ),
       );
-      _resetForm();
     } catch (e) {
       if (!mounted) return;
       _showSnack('Gagal membuat order: $e');
@@ -234,21 +233,6 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     }
   }
 
-  void _resetForm() {
-    _formKey.currentState?.reset();
-    _itemDescriptionCtrl.clear();
-    setState(() {
-      _selectedCategory = null;
-      _pickupAddress = null;
-      _pickupLat = null;
-      _pickupLng = null;
-      _destinationAddress = null;
-      _destinationLat = null;
-      _destinationLng = null;
-      _distanceKm = null;
-      _totalCost = null;
-    });
-  }
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(
