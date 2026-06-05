@@ -76,20 +76,24 @@ class _CustomerWaitingScreenState extends State<CustomerWaitingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return ChangeNotifierProvider<CustomerOrderViewModel>.value(
       value: _viewModel,
       child: Consumer<CustomerOrderViewModel>(
         builder: (context, viewModel, _) {
           return Scaffold(
             body: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Color(0xFF07111F),
-                    Color(0xFF0D1B2A),
-                    Color(0xFF111827),
+                    colorScheme.primary.withValues(alpha: 0.10),
+                    colorScheme.surface,
+                    colorScheme.secondary.withValues(alpha: 0.08),
                   ],
                 ),
               ),
@@ -102,22 +106,23 @@ class _CustomerWaitingScreenState extends State<CustomerWaitingScreen>
                         children: [
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.08),
+                              color: colorScheme.primary.withValues(
+                                alpha: 0.08,
+                              ),
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: IconButton(
                               onPressed: () => Navigator.of(context).maybePop(),
                               icon: const Icon(Icons.arrow_back_ios_new),
-                              color: Colors.white,
+                              color: colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(width: 16),
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'Menunggu Driver',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
+                              style: textTheme.titleLarge?.copyWith(
+                                color: colorScheme.onSurface,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -141,26 +146,21 @@ class _CustomerWaitingScreenState extends State<CustomerWaitingScreen>
                                     size: size,
                                   ),
                                   const SizedBox(height: 32),
-                                  const Text(
+                                  Text(
                                     'Searching for nearby drivers...',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 24,
+                                    style: textTheme.headlineSmall?.copyWith(
+                                      color: colorScheme.onSurface,
                                       fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.2,
                                     ),
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
                                     viewModel.message ??
-                                        'Tunggu sebentar, driver terbaik sedang dicari.',
+                                        'Tunggu sebentar, mencari driver terdekat.',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.72,
-                                      ),
-                                      fontSize: 14,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      color: colorScheme.onSurface,
                                       height: 1.4,
                                     ),
                                   ),
@@ -177,35 +177,34 @@ class _CustomerWaitingScreenState extends State<CustomerWaitingScreen>
                                               vertical: 12,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: Colors.white.withValues(
-                                                alpha: 0.08,
-                                              ),
+                                              color: colorScheme.secondary
+                                                  .withValues(alpha: 0.08),
                                               borderRadius:
                                                   BorderRadius.circular(16),
                                               border: Border.all(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.08,
-                                                ),
+                                                color: colorScheme.secondary
+                                                    .withValues(alpha: 0.18),
                                               ),
                                             ),
                                             child: Column(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                const Text(
-                                                  'Batalkan otomatis tersedia',
-                                                  style: TextStyle(
-                                                    color: Colors.white70,
-                                                    fontSize: 12,
-                                                  ),
+                                                Text(
+                                                  'Pembatalan otomatis tersedia',
+                                                  style: textTheme.bodySmall
+                                                      ?.copyWith(
+                                                        color: colorScheme
+                                                            .onSurface,
+                                                      ),
                                                 ),
                                                 const SizedBox(height: 6),
                                                 Text(
-                                                  '${viewModel.cancelCountdown} detik',
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
+                                                  '${viewModel.buttonCountdown} detik',
+                                                  style: textTheme.titleMedium
+                                                      ?.copyWith(
+                                                        color: colorScheme
+                                                            .onSurface,
+                                                      ),
                                                 ),
                                               ],
                                             ),
@@ -234,22 +233,20 @@ class _CustomerWaitingScreenState extends State<CustomerWaitingScreen>
                                   ? _cancelOrder
                                   : null,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE76F51),
-                                foregroundColor: Colors.white,
-                                disabledBackgroundColor: const Color(
-                                  0xFFE76F51,
-                                ).withValues(alpha: 0.35),
+                                backgroundColor: colorScheme.error,
+                                foregroundColor: colorScheme.onError,
+                                disabledBackgroundColor: colorScheme.error
+                                    .withValues(alpha: 0.35),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(18),
                                 ),
                                 elevation: 0,
                               ),
                               icon: const Icon(Icons.cancel_outlined),
-                              label: const Text(
+                              label: Text(
                                 'Batalkan Pesanan',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
+                                style: textTheme.labelLarge?.copyWith(
+                                  color: colorScheme.onError,
                                 ),
                               ),
                             ),
@@ -276,6 +273,8 @@ class _RadarSearchAnimation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return AnimatedBuilder(
       animation: controller,
       builder: (context, child) {
@@ -292,8 +291,8 @@ class _RadarSearchAnimation extends StatelessWidget {
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFF6EE7F9).withValues(alpha: 0.16),
-                      const Color(0xFF0F172A).withValues(alpha: 0.0),
+                      colorScheme.primary.withValues(alpha: 0.40),
+                      colorScheme.primary.withValues(alpha: 0.0),
                     ],
                   ),
                 ),
@@ -305,18 +304,29 @@ class _RadarSearchAnimation extends StatelessWidget {
                 height: size * 0.42,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const RadialGradient(
-                    colors: [Color(0xFF8BE9FD), Color(0xFF1D4ED8)],
+                  gradient: RadialGradient(
+                    colors: [
+                      colorScheme.primary.withValues(alpha: 0.95),
+                      colorScheme.secondary.withValues(alpha: 0.95),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: colorScheme.onPrimary.withValues(alpha: 0.2),
+                    width: 2,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF22D3EE).withValues(alpha: 0.45),
+                      color: colorScheme.primary.withValues(alpha: 0.25),
                       blurRadius: 30,
                       spreadRadius: 6,
                     ),
                   ],
                 ),
-                child: const Icon(Icons.radar, color: Colors.white, size: 42),
+                child: Icon(
+                  Icons.delivery_dining,
+                  color: colorScheme.onPrimary,
+                  size: 42,
+                ),
               ),
             ],
           ),
@@ -333,9 +343,10 @@ class _RadarRipple extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final eased = Curves.easeOut.transform(progress.clamp(0.0, 1.0));
     final scale = 0.45 + (eased * 0.55);
-    final opacity = (1.0 - progress).clamp(0.0, 1.0) * 0.35;
+    final opacity = (1.0 - progress).clamp(0.0, 1.0) * 0.5;
 
     return Opacity(
       opacity: opacity,
@@ -344,8 +355,9 @@ class _RadarRipple extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
+            color: colorScheme.primary.withValues(alpha: 0.05),
             border: Border.all(
-              color: const Color(0xFF67E8F9).withValues(alpha: 0.95),
+              color: colorScheme.primary.withValues(alpha: 0.35),
               width: 2,
             ),
           ),

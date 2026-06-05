@@ -16,7 +16,7 @@ enum CustomerOrderFlowState {
 
 class CustomerOrderViewModel extends ChangeNotifier {
   CustomerOrderViewModel({required this.orderId}) {
-    _startManualCancelTimer();
+    _startButtonTimer();
     _startSystemTimeoutTimer();
     _listenToOrderDocument();
   }
@@ -31,10 +31,10 @@ class CustomerOrderViewModel extends ChangeNotifier {
   Timer? _systemTimeoutTimer;
 
   OrderModel? _currentOrder;
-  // OrderStatus? _lastKnownStatus;
   String? _lastKnownDriverId;
   bool _canCancel = true;
-  int _cancelCountdown = 10;
+  int _buttonCountdown = 10;
+  int _systemCountdown = 60;
   bool _isHandlingTerminalState = false;
   CustomerOrderFlowState _state = CustomerOrderFlowState.waiting;
   String? _message;
@@ -47,7 +47,8 @@ class CustomerOrderViewModel extends ChangeNotifier {
 
   OrderModel? get currentOrder => _currentOrder;
   bool get canCancel => _canCancel && _state == CustomerOrderFlowState.waiting;
-  int get cancelCountdown => _cancelCountdown;
+  int get buttonCountdown => _buttonCountdown;
+  int get systemCountdown => _systemCountdown;
   CustomerOrderFlowState get state => _state;
   String? get message => _message;
   bool get hasDriverAssigned =>
@@ -88,7 +89,6 @@ class CustomerOrderViewModel extends ChangeNotifier {
     final driverId = order.driverId?.trim();
 
     _currentOrder = order;
-    // _lastKnownStatus = order.status;
     _lastKnownDriverId = driverId;
 
     final didDriverJustAccept =
@@ -114,10 +114,10 @@ class CustomerOrderViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _startManualCancelTimer() {
+  void _startButtonTimer() {
     _manualCancelTimer?.cancel();
     _canCancel = true;
-    _cancelCountdown = 10;
+    _buttonCountdown = 10;
     notifyListeners();
 
     _manualCancelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -126,12 +126,12 @@ class CustomerOrderViewModel extends ChangeNotifier {
         return;
       }
 
-      if (_cancelCountdown <= 1) {
-        _cancelCountdown = 0;
+      if (_buttonCountdown <= 1) {
+        _buttonCountdown = 0;
         _canCancel = false;
         timer.cancel();
       } else {
-        _cancelCountdown -= 1;
+        _buttonCountdown -= 1;
       }
 
       notifyListeners();
@@ -140,32 +140,51 @@ class CustomerOrderViewModel extends ChangeNotifier {
 
   void _startSystemTimeoutTimer() {
     _systemTimeoutTimer?.cancel();
+    _systemCountdown = 60;
+    notifyListeners();
 
-    _systemTimeoutTimer = Timer(const Duration(seconds: 60), () async {
-      if (_state != CustomerOrderFlowState.waiting || hasDriverAssigned) {
+    _systemTimeoutTimer = Timer.periodic(const Duration(seconds: 1), (
+      timer,
+    ) async {
+      if (_state != CustomerOrderFlowState.waiting) {
+        timer.cancel();
         return;
       }
 
-      if (_isHandlingTerminalState) {
+      if (hasDriverAssigned) {
+        timer.cancel();
         return;
       }
 
-      _isHandlingTerminalState = true;
-      _state = CustomerOrderFlowState.timeout;
-      _message = 'Tidak ada driver yang menerima order.';
-      _stopTimers();
+      if (_systemCountdown <= 1) {
+        _systemCountdown = 0;
+        timer.cancel();
 
-      try {
-        await _orderService.updateOrderStatus(
-          orderId: orderId,
-          status: OrderStatus.cancelled.name,
-        );
-      } catch (error) {
-        debugPrint('Failed to cancel order on timeout: $error');
-      } finally {
-        _isHandlingTerminalState = false;
-        notifyListeners();
+        if (_isHandlingTerminalState) {
+          return;
+        }
+
+        _isHandlingTerminalState = true;
+        _state = CustomerOrderFlowState.timeout;
+        _message = 'Tidak ada driver yang menerima order.';
+        _stopTimers();
+
+        try {
+          await _orderService.updateOrderStatus(
+            orderId: orderId,
+            status: OrderStatus.cancelled.name,
+          );
+        } catch (error) {
+          debugPrint('Failed to cancel order on timeout: $error');
+        } finally {
+          _isHandlingTerminalState = false;
+          notifyListeners();
+        }
+        return;
       }
+
+      _systemCountdown -= 1;
+      notifyListeners();
     });
   }
 
@@ -175,7 +194,8 @@ class CustomerOrderViewModel extends ChangeNotifier {
     _systemTimeoutTimer?.cancel();
     _systemTimeoutTimer = null;
     _canCancel = false;
-    _cancelCountdown = 0;
+    _buttonCountdown = 0;
+    _systemCountdown = 0;
   }
 
   Future<void> cancelOrder() async {
