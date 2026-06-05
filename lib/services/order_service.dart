@@ -5,6 +5,15 @@ class OrderService {
   // 1. buat instance Firestore
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  // 1b. listen satu dokumen order secara real-time
+  Stream<OrderModel?> watchOrder(String orderId) {
+    return _db
+        .collection('orders')
+        .doc(orderId)
+        .snapshots()
+        .map((doc) => doc.exists ? OrderModel.fromFirestore(doc) : null);
+  }
+
   // 2. method buat fetch order berdasarkan ID
   Future<OrderModel?> fetchOrderById(String orderId) async {
     final doc = await _db.collection('orders').doc(orderId).get();
