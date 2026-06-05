@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/order_service.dart';
+import '../services/routing_service.dart';
 import '../services/pricing_service.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import 'customer_map_picker_screen.dart';
+import 'customer_waiting_screen.dart';
 
 class CustomerCreateOrderScreen extends StatefulWidget {
   const CustomerCreateOrderScreen({super.key});
@@ -17,10 +19,9 @@ class CustomerCreateOrderScreen extends StatefulWidget {
 class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
   final OrderService _orderService = OrderService();
   final PricingService _pricingService = PricingService();
+  final RoutingService _routingService = RoutingService();
   final _formKey = GlobalKey<FormState>();
 
-  final _pickupAddressCtrl = TextEditingController();
-  final _destAddressCtrl = TextEditingController();
   final _itemDescriptionCtrl = TextEditingController();
 
   // data harga & kategori
@@ -29,8 +30,12 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
   double? _costPerKm;
 
   // hasil dari map picker
-  LatLng? _pickup;
-  LatLng? _destination;
+  String? _pickupAddress;
+  double? _pickupLat;
+  double? _pickupLng;
+  String? _destinationAddress;
+  double? _destinationLat;
+  double? _destinationLng;
   double? _distanceKm;
   double? _totalCost;
 
@@ -46,8 +51,6 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
 
   @override
   void dispose() {
-    _pickupAddressCtrl.dispose();
-    _destAddressCtrl.dispose();
     _itemDescriptionCtrl.dispose();
     super.dispose();
   }
@@ -78,7 +81,9 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
   }
 
   void _recalculateCost() {
-    if (_distanceKm != null && _selectedCategory != null && _costPerKm != null) {
+    if (_distanceKm != null &&
+        _selectedCategory != null &&
+        _costPerKm != null) {
       final baseCost = _distanceKm! * _costPerKm!;
       _totalCost = baseCost + _selectedCategory!.additionalCost;
     } else {
@@ -86,29 +91,89 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     }
   }
 
+  Future<void> _refreshDistanceAndCost() async {
+    if (_pickupLat == null ||
+        _pickupLng == null ||
+        _destinationLat == null ||
+        _destinationLng == null) {
+      setState(() {
+        _distanceKm = null;
+        _recalculateCost();
+      });
+      return;
+    }
+
+    try {
+      final routeInfo = await _routingService.getRouteInfo(
+        LatLng(_pickupLat!, _pickupLng!),
+        LatLng(_destinationLat!, _destinationLng!),
+      );
+      if (!mounted) return;
+      setState(() {
+        _distanceKm = routeInfo.distanceMeters / 1000;
+        _recalculateCost();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _distanceKm = null;
+        _recalculateCost();
+      });
+      _showSnack('Gagal menghitung jarak: $e');
+    }
+  }
+
   Future<void> _openMapPicker() async {
-    final result = await Navigator.of(context).push<MapPickerResult>(
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => CustomerMapPickerScreen(
-          initialPickup: _pickup,
-          initialDestination: _destination,
+          initialPickup: _pickupLat == null || _pickupLng == null
+              ? null
+              : LatLng(_pickupLat!, _pickupLng!),
+          initialDestination: _destinationLat == null || _destinationLng == null
+              ? null
+              : LatLng(_destinationLat!, _destinationLng!),
         ),
       ),
     );
 
     if (result == null || !mounted) return;
 
+    final pickupAddress = (result['pickup_address'] as String?)?.trim();
+    final pickupLat = result['pickup_lat'] as double?;
+    final pickupLng = result['pickup_lng'] as double?;
+    final destAddress = (result['dest_address'] as String?)?.trim();
+    final destLat = result['dest_lat'] as double?;
+    final destLng = result['dest_lng'] as double?;
+
+    if (pickupAddress == null ||
+        pickupAddress.isEmpty ||
+        pickupLat == null ||
+        pickupLng == null ||
+        destAddress == null ||
+        destAddress.isEmpty ||
+        destLat == null ||
+        destLng == null) {
+      return;
+    }
+
     setState(() {
-      _pickup = result.pickup;
-      _destination = result.destination;
-      _distanceKm = result.distanceMeters / 1000;
-      _recalculateCost();
+      _pickupAddress = pickupAddress;
+      _pickupLat = pickupLat;
+      _pickupLng = pickupLng;
+      _destinationAddress = destAddress;
+      _destinationLat = destLat;
+      _destinationLng = destLng;
     });
+
+    await _refreshDistanceAndCost();
   }
 
   bool get _isReadyToSubmit =>
-      _pickup != null &&
-      _destination != null &&
+      _pickupLat != null &&
+      _pickupLng != null &&
+      _destinationLat != null &&
+      _destinationLng != null &&
       _distanceKm != null &&
       _totalCost != null &&
       _selectedCategory != null &&
@@ -119,7 +184,11 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     if (_isSubmitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    if (_pickup == null || _destination == null) {
+    if (_pickupLat == null || _pickupLng == null) {
+      _showSnack('Silakan pilih lokasi pickup & tujuan di peta terlebih dulu');
+      return;
+    }
+    if (_destinationLat == null || _destinationLng == null) {
       _showSnack('Silakan pilih lokasi pickup & tujuan di peta terlebih dulu');
       return;
     }
@@ -137,14 +206,14 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     try {
       final customerId =
           context.read<AuthViewModel>().currentUser?.uid ?? '';
-      final orderId = await _orderService.createOrder(
+      final newOrderId = await _orderService.createOrder(
         customerId: customerId,
-        pickupAddress: _pickupAddressCtrl.text.trim(),
-        pickupLat: _pickup!.latitude,
-        pickupLng: _pickup!.longitude,
-        destAddress: _destAddressCtrl.text.trim(),
-        destLat: _destination!.latitude,
-        destLng: _destination!.longitude,
+        pickupAddress: _pickupAddress?.trim() ?? '',
+        pickupLat: _pickupLat!,
+        pickupLng: _pickupLng!,
+        destAddress: _destinationAddress?.trim() ?? '',
+        destLat: _destinationLat!,
+        destLng: _destinationLng!,
         itemDescription: _itemDescriptionCtrl.text.trim(),
         weightCategoryId: _selectedCategory!.id,
         distanceKm: _distanceKm!,
@@ -152,13 +221,11 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Order berhasil dibuat (id: $orderId)'),
-          backgroundColor: Colors.green,
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => CustomerWaitingScreen(orderId: newOrderId),
         ),
       );
-      _resetForm();
     } catch (e) {
       if (!mounted) return;
       _showSnack('Gagal membuat order: $e');
@@ -167,23 +234,11 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     }
   }
 
-  void _resetForm() {
-    _formKey.currentState?.reset();
-    _pickupAddressCtrl.clear();
-    _destAddressCtrl.clear();
-    _itemDescriptionCtrl.clear();
-    setState(() {
-      _selectedCategory = null;
-      _pickup = null;
-      _destination = null;
-      _distanceKm = null;
-      _totalCost = null;
-    });
-  }
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String? _validateRequired(String? value) {
@@ -202,8 +257,8 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
       body: _isLoadingConfig
           ? const Center(child: CircularProgressIndicator())
           : _configError != null
-              ? _buildConfigError()
-              : _buildForm(),
+          ? _buildConfigError()
+          : _buildForm(),
     );
   }
 
@@ -235,22 +290,43 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _buildSectionTitle('Alamat'),
-          _buildTextField(
-            controller: _pickupAddressCtrl,
-            label: 'Nama/Alamat Jemput',
-            validator: _validateRequired,
-            helperText:
-                'Titik koordinat jemput ditentukan lewat peta di bawah.',
+          _buildSectionTitle('Lokasi & Biaya'),
+          _buildLocationSummary(
+            'Pickup Address',
+            _pickupAddress,
+            _pickupLat,
+            _pickupLng,
+            accent: Colors.green,
           ),
-          _buildTextField(
-            controller: _destAddressCtrl,
-            label: 'Nama/Alamat Tujuan',
-            validator: _validateRequired,
-            helperText:
-                'Titik koordinat tujuan ditentukan lewat peta di bawah.',
+          const SizedBox(height: 12),
+          _buildLocationSummary(
+            'Destination Address',
+            _destinationAddress,
+            _destinationLat,
+            _destinationLng,
+            accent: Colors.red,
           ),
           const SizedBox(height: 8),
+          SizedBox(
+            height: 48,
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _openMapPicker,
+              icon: const Icon(Icons.map),
+              label: const Text('Pilih Lokasi di Peta'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildReadOnlyRow(
+            'Jarak',
+            _distanceKm == null ? '-' : '${_distanceKm!.toStringAsFixed(2)} km',
+          ),
+          _buildReadOnlyRow(
+            'Total Biaya',
+            _totalCost == null ? '-' : 'Rp ${_totalCost!.toStringAsFixed(0)}',
+            highlight: true,
+          ),
+          const SizedBox(height: 24),
           _buildSectionTitle('Detail Barang'),
           _buildTextField(
             controller: _itemDescriptionCtrl,
@@ -274,54 +350,13 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
                   ),
                 )
                 .toList(),
-            validator: (value) =>
-                value == null ? 'Pilih kategori berat' : null,
+            validator: (value) => value == null ? 'Pilih kategori berat' : null,
             onChanged: (value) {
               setState(() {
                 _selectedCategory = value;
                 _recalculateCost();
               });
             },
-          ),
-          const SizedBox(height: 16),
-          _buildSectionTitle('Lokasi & Biaya'),
-          SizedBox(
-            height: 48,
-            child: OutlinedButton.icon(
-              onPressed: _openMapPicker,
-              icon: const Icon(Icons.map),
-              label: Text(
-                _pickup == null
-                    ? 'Pilih Lokasi di Peta'
-                    : 'Ubah Lokasi di Peta',
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildReadOnlyRow(
-            'Pickup',
-            _pickup == null
-                ? '-'
-                : '${_pickup!.latitude.toStringAsFixed(5)}, ${_pickup!.longitude.toStringAsFixed(5)}',
-          ),
-          _buildReadOnlyRow(
-            'Tujuan',
-            _destination == null
-                ? '-'
-                : '${_destination!.latitude.toStringAsFixed(5)}, ${_destination!.longitude.toStringAsFixed(5)}',
-          ),
-          _buildReadOnlyRow(
-            'Jarak',
-            _distanceKm == null
-                ? '-'
-                : '${_distanceKm!.toStringAsFixed(2)} km',
-          ),
-          _buildReadOnlyRow(
-            'Total Biaya',
-            _totalCost == null
-                ? '-'
-                : 'Rp ${_totalCost!.toStringAsFixed(0)}',
-            highlight: true,
           ),
           const SizedBox(height: 24),
           SizedBox(
@@ -368,6 +403,31 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     );
   }
 
+  Widget _buildLocationSummary(
+    String label,
+    String? address,
+    double? lat,
+    double? lng, {
+    Color? accent,
+  }) {
+    final hasValue = address != null && lat != null && lng != null;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      tileColor: accent?.withValues(alpha: 0.08) ?? Colors.grey.shade100,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: accent ?? Colors.black87,
+        ),
+      ),
+      subtitle: Text(hasValue ? address : 'Belum dipilih'),
+      isThreeLine: false,
+    );
+  }
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -390,8 +450,11 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     );
   }
 
-  Widget _buildReadOnlyRow(String label, String value,
-      {bool highlight = false}) {
+  Widget _buildReadOnlyRow(
+    String label,
+    String value, {
+    bool highlight = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -403,9 +466,7 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
             style: TextStyle(
               fontWeight: highlight ? FontWeight.bold : FontWeight.w500,
               fontSize: highlight ? 16 : 14,
-              color: highlight
-                  ? Theme.of(context).colorScheme.secondary
-                  : null,
+              color: highlight ? Theme.of(context).colorScheme.secondary : null,
             ),
           ),
         ],
