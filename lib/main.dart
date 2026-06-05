@@ -11,11 +11,18 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // farell: ubah ini, nyesuaikan import dari firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    // ignore: avoid_print
+    print('Error initializing Firebase: $e');
+  }
+
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => MapViewModel())],
