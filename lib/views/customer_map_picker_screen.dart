@@ -1,33 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
-import '../services/routing_service.dart';
 
-// farell: hasil yang dikembalikan ke CustomerCreateOrderScreen
-class MapPickerResult {
-  final LatLng pickup;
-  final LatLng destination;
-  final double distanceMeters;
+import '../services/geocoding_service.dart';
 
-  MapPickerResult({
-    required this.pickup,
-    required this.destination,
-    required this.distanceMeters,
-  });
-}
-
-enum _PickMode { pickup, destination }
+enum _LocationType { pickup, destination }
 
 class CustomerMapPickerScreen extends StatefulWidget {
-  // titik awal opsional (kalau user sudah pernah pilih sebelumnya)
   final LatLng? initialPickup;
   final LatLng? initialDestination;
+  final String? initialType;
 
   const CustomerMapPickerScreen({
     super.key,
     this.initialPickup,
     this.initialDestination,
+    this.initialType,
   });
 
   @override
@@ -37,37 +28,78 @@ class CustomerMapPickerScreen extends StatefulWidget {
 
 class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
   final MapController _mapController = MapController();
-  final RoutingService _routingService = RoutingService();
+  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  Timer? _debounceTimer;
 
-  // default center: area Jember (sesuai default MapDriverScreen)
   static const LatLng _defaultCenter = LatLng(-8.1689, 113.7022);
 
-  _PickMode _mode = _PickMode.pickup;
-  LatLng? _pickup;
-  LatLng? _destination;
-  LatLng? _currentLocation;
+  LatLng? _selectedPoint;
+  String? _selectedAddressText;
+  _LocationType _selectedType = _LocationType.pickup;
 
-  List<LatLng> _routePoints = [];
-  double? _distanceMeters;
+  String? _pickupAddress;
+  double? _pickupLat;
+  double? _pickupLng;
+  String? _destinationAddress;
+  double? _destinationLat;
+  double? _destinationLng;
 
-  bool _isCalculating = false;
-  String? _errorText;
+  List<Map<String, dynamic>> _searchResults = [];
+  bool _isSearching = false;
+  bool _isLoadingAddress = false;
+  String? _searchError;
 
   @override
   void initState() {
     super.initState();
-    _pickup = widget.initialPickup;
-    _destination = widget.initialDestination;
-    if (_pickup != null && _destination != null) {
+    if (widget.initialPickup != null) {
+      _pickupLat = widget.initialPickup!.latitude;
+      _pickupLng = widget.initialPickup!.longitude;
+      _pickupAddress = 'Lokasi pickup terpilih';
+    }
+    if (widget.initialDestination != null) {
+      _destinationLat = widget.initialDestination!.latitude;
+      _destinationLng = widget.initialDestination!.longitude;
+      _destinationAddress = 'Lokasi tujuan terpilih';
+    }
+
+    if (widget.initialType == 'destination') {
+      _selectedType = _LocationType.destination;
+    }
+    _selectedPoint = widget.initialType == 'destination'
+        ? widget.initialDestination ?? widget.initialPickup
+        : widget.initialPickup ?? widget.initialDestination;
+    if (_selectedType == _LocationType.pickup && _pickupAddress != null) {
+      _selectedAddressText = _pickupAddress;
+    } else if (_selectedType == _LocationType.destination &&
+        _destinationAddress != null) {
+      _selectedAddressText = _destinationAddress;
+    }
+    _addressController.text = _selectedAddressText ?? '';
+
+    if (_selectedPoint != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _recalculateRoute();
-        _fitToBounds();
+        if (!mounted) return;
+        try {
+          _mapController.move(_selectedPoint!, 15.0);
+        } catch (_) {}
       });
     }
+
     _initCurrentLocation();
   }
 
-  // coba ambil lokasi user; kalau gagal/ditolak, diam dan tetap pakai default
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _searchController.dispose();
+    _addressController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
   Future<void> _initCurrentLocation() async {
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -86,112 +118,164 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
       if (!mounted) return;
 
       final loc = LatLng(pos.latitude, pos.longitude);
-      setState(() => _currentLocation = loc);
 
-      // center ke lokasi user hanya jika belum ada titik yang dipilih
-      if (_pickup == null && _destination == null) {
+      if (_selectedPoint == null) {
         try {
           _mapController.move(loc, 15.0);
-        } catch (_) {
-          // map belum siap, abaikan
-        }
+        } catch (_) {}
       }
-    } catch (_) {
-      // fallback diam ke default Jember
-    }
+    } catch (_) {}
   }
 
-  void _goToMyLocation() {
-    if (_currentLocation == null) return;
-    _mapController.move(_currentLocation!, 15.0);
-  }
-
-  // auto-fit map ke pickup & tujuan biar dua titik kelihatan jelas
-  void _fitToBounds() {
-    if (_pickup == null || _destination == null) return;
-    try {
-      _mapController.fitCamera(
-        CameraFit.coordinates(
-          coordinates: [_pickup!, _destination!],
-          padding: const EdgeInsets.only(
-            top: 140,
-            left: 50,
-            right: 50,
-            bottom: 180,
-          ),
-          maxZoom: 16.0,
-        ),
-      );
-    } catch (_) {
-      // map belum siap, abaikan
-    }
-  }
-
-  void _onMapTap(LatLng point) {
+  void _syncActiveSelection(String address, double lat, double lng) {
     setState(() {
-      if (_mode == _PickMode.pickup) {
-        _pickup = point;
+      _selectedAddressText = address;
+      _addressController.text = address;
+
+      if (_selectedType == _LocationType.pickup) {
+        _pickupAddress = address;
+        _pickupLat = lat;
+        _pickupLng = lng;
       } else {
-        _destination = point;
+        _destinationAddress = address;
+        _destinationLat = lat;
+        _destinationLng = lng;
       }
-      // reset hasil lama karena titik berubah
-      _routePoints = [];
-      _distanceMeters = null;
-      _errorText = null;
     });
-
-    if (_pickup != null && _destination != null) {
-      _recalculateRoute();
-    }
   }
 
-  Future<void> _recalculateRoute() async {
-    if (_pickup == null || _destination == null) return;
+  void _onSearchChanged(String query) {
+    _debounceTimer?.cancel();
 
-    setState(() {
-      _isCalculating = true;
-      _errorText = null;
-    });
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+        _searchError = null;
+      });
+      return;
+    }
 
-    try {
-      final info = await _routingService.getRouteInfo(_pickup!, _destination!);
+    _debounceTimer = Timer(const Duration(milliseconds: 400), () async {
       if (!mounted) return;
       setState(() {
-        _routePoints = info.routePoints;
-        _distanceMeters = info.distanceMeters;
+        _isSearching = true;
+        _searchError = null;
       });
-      _fitToBounds();
+
+      try {
+        final results = await GeocodingService.searchAddress(query);
+        if (!mounted) return;
+        setState(() {
+          _searchResults = results;
+          _isSearching = false;
+          _searchError = results.isEmpty ? 'Alamat tidak ditemukan' : null;
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _searchResults = [];
+          _isSearching = false;
+          _searchError = 'Gagal mencari alamat: $e';
+        });
+      }
+    });
+  }
+
+  Future<void> _onMapTap(LatLng point) async {
+    setState(() {
+      _selectedPoint = point;
+      _searchResults = [];
+      _searchError = null;
+      _searchController.clear();
+      _isLoadingAddress = true;
+    });
+
+    try {
+      _mapController.move(point, 16.0);
+    } catch (_) {}
+
+    try {
+      final address = await GeocodingService.reverseGeocode(
+        point.latitude,
+        point.longitude,
+      );
+
+      if (!mounted) return;
+
+      final resolvedAddress = (address?.trim().isNotEmpty == true)
+          ? address!.trim()
+          : 'Lokasi dipilih';
+      _syncActiveSelection(resolvedAddress, point.latitude, point.longitude);
+      setState(() => _searchError = null);
     } catch (e) {
       if (!mounted) return;
+      final fallbackAddress = 'Lokasi dipilih';
+      _syncActiveSelection(fallbackAddress, point.latitude, point.longitude);
       setState(() {
-        _routePoints = [];
-        _distanceMeters = null;
-        _errorText = 'Gagal menghitung rute: $e';
+        _searchError = 'Gagal mengambil alamat: $e';
       });
     } finally {
-      if (mounted) setState(() => _isCalculating = false);
+      if (mounted) {
+        setState(() => _isLoadingAddress = false);
+      }
     }
+  }
+
+  void _onSearchResultSelected(Map<String, dynamic> result) {
+    final lat = result['lat'] as double?;
+    final lng = result['lon'] as double?;
+    final address = (result['display_name'] as String?)?.trim();
+
+    if (lat == null || lng == null) {
+      return;
+    }
+
+    final point = LatLng(lat, lng);
+    setState(() {
+      _selectedPoint = point;
+      _searchResults = [];
+      _searchError = null;
+      _searchController.clear();
+    });
+
+    final resolvedAddress = address?.isNotEmpty == true
+        ? address!
+      : 'Lokasi terpilih';
+    _syncActiveSelection(resolvedAddress, lat, lng);
+
+    _searchFocusNode.unfocus();
+
+    try {
+      _mapController.move(point, 16.0);
+    } catch (_) {}
   }
 
   void _confirm() {
-    if (_pickup == null || _destination == null || _distanceMeters == null) {
+    if (_pickupLat == null ||
+        _pickupLng == null ||
+        _destinationLat == null ||
+        _destinationLng == null) {
       return;
     }
-    Navigator.of(context).pop(
-      MapPickerResult(
-        pickup: _pickup!,
-        destination: _destination!,
-        distanceMeters: _distanceMeters!,
-      ),
-    );
+    Navigator.of(context).pop({
+      'pickup_address': _pickupAddress,
+      'pickup_lat': _pickupLat,
+      'pickup_lng': _pickupLng,
+      'dest_address': _destinationAddress,
+      'dest_lat': _destinationLat,
+      'dest_lng': _destinationLng,
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final canConfirm = _pickup != null &&
-        _destination != null &&
-        _distanceMeters != null &&
-        !_isCalculating;
+    final canConfirm =
+        _pickupLat != null &&
+        _pickupLng != null &&
+        _destinationLat != null &&
+        _destinationLng != null &&
+        _addressController.text.trim().isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -204,7 +288,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _pickup ?? _defaultCenter,
+              initialCenter: _selectedPoint ?? _defaultCenter,
               initialZoom: 14.0,
               onTap: (tapPosition, point) => _onMapTap(point),
             ),
@@ -213,38 +297,28 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.deltasend.app',
               ),
-              if (_routePoints.isNotEmpty)
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: _routePoints,
-                      color: Colors.blue,
-                      strokeWidth: 5.0,
-                    ),
-                  ],
-                ),
               MarkerLayer(
                 markers: [
-                  if (_pickup != null)
+                  if (_pickupLat != null && _pickupLng != null)
                     Marker(
-                      point: _pickup!,
-                      width: 40,
-                      height: 40,
-                      child: const Icon(
+                      point: LatLng(_pickupLat!, _pickupLng!),
+                      width: 44,
+                      height: 44,
+                      child: Icon(
                         Icons.my_location,
                         color: Colors.green,
-                        size: 35,
+                        size: 36,
                       ),
                     ),
-                  if (_destination != null)
+                  if (_destinationLat != null && _destinationLng != null)
                     Marker(
-                      point: _destination!,
-                      width: 40,
-                      height: 40,
+                      point: LatLng(_destinationLat!, _destinationLng!),
+                      width: 44,
+                      height: 44,
                       child: const Icon(
                         Icons.flag,
                         color: Colors.red,
-                        size: 35,
+                        size: 36,
                       ),
                     ),
                 ],
@@ -252,85 +326,199 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
             ],
           ),
 
-          // panel atas: pilih mode + instruksi
           Positioned(
             top: 12,
             left: 12,
             right: 12,
-            child: Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildModeButton(
-                            label: 'Set Pickup',
-                            icon: Icons.my_location,
-                            active: _mode == _PickMode.pickup,
-                            color: Colors.green,
-                            onTap: () =>
-                                setState(() => _mode = _PickMode.pickup),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildModeButton(
-                            label: 'Set Tujuan',
-                            icon: Icons.flag,
-                            active: _mode == _PickMode.destination,
-                            color: Colors.red,
-                            onTap: () =>
-                                setState(() => _mode = _PickMode.destination),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Pilih mode Set Pickup atau Set Tujuan, lalu tap pada peta',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _mode == _PickMode.pickup
-                          ? 'Mode aktif: menentukan titik PICKUP'
-                          : 'Mode aktif: menentukan titik TUJUAN',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _mode == _PickMode.pickup
-                            ? Colors.green
-                            : Colors.red,
+            child: AnimatedBuilder(
+              animation: _searchFocusNode,
+              builder: (context, _) {
+                final showResults = _searchController.text.trim().isNotEmpty;
+                final focused = _searchFocusNode.hasFocus;
+
+                return Material(
+                  elevation: focused || showResults ? 10 : 6,
+                  shadowColor: Colors.black26,
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  clipBehavior: Clip.antiAlias,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: focused
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey.shade200,
+                        width: 1,
                       ),
                     ),
-                  ],
-                ),
-              ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildModeButton(
+                                    label: 'Pickup',
+                                    icon: Icons.my_location,
+                                    active:
+                                        _selectedType == _LocationType.pickup,
+                                    color: Colors.green,
+                                    onTap: () => setState(
+                                      () => _selectedType =
+                                          _LocationType.pickup,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _buildModeButton(
+                                    label: 'Destination',
+                                    icon: Icons.flag,
+                                    active: _selectedType ==
+                                        _LocationType.destination,
+                                    color: Colors.red,
+                                    onTap: () => setState(
+                                      () => _selectedType =
+                                          _LocationType.destination,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                            child: TextField(
+                              controller: _searchController,
+                              focusNode: _searchFocusNode,
+                              onChanged: (value) {
+                                setState(() {});
+                                _onSearchChanged(value);
+                              },
+                              decoration: InputDecoration(
+                                hintText: 'Cari alamat atau tempat',
+                                prefixIcon: const Icon(Icons.search),
+                                suffixIcon: _searchController.text.isEmpty
+                                    ? (_isLoadingAddress
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(12),
+                                              child: SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              ),
+                                            )
+                                          : null)
+                                    : IconButton(
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          _onSearchChanged('');
+                                          setState(() {});
+                                        },
+                                        icon: const Icon(Icons.close),
+                                      ),
+                                filled: true,
+                                fillColor: Colors.grey.shade100,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                    width: 1.4,
+                                  ),
+                                ),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                          if (!showResults &&
+                              _selectedPoint == null &&
+                              !_searchFocusNode.hasFocus)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                              child: Text(
+                                _selectedPoint == null &&
+                                        _searchController.text.isEmpty
+                                    ? 'Tap peta atau pilih hasil pencarian'
+                                    : '',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ),
+                        if (_selectedPoint != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: Text(
+                              _selectedAddressText ?? 'Tap untuk memilih lokasi',
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                height: 1.25,
+                              ),
+                            ),
+                          ),
+                          AnimatedSize(
+                            duration: const Duration(milliseconds: 180),
+                            curve: Curves.easeOut,
+                            child: showResults
+                                ? ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight:
+                                          _searchResults.isEmpty ||
+                                                  _isSearching
+                                              ? 120
+                                              : (_searchResults.length >= 5
+                                                    ? 280
+                                                    : 64.0 +
+                                                        (_searchResults
+                                                                .length *
+                                                            64.0)),
+                                    ),
+                                    child: _buildSearchResultsPanel(),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
 
-          // tombol "Lokasi Saya": hanya muncul jika lokasi user tersedia
-          if (_currentLocation != null)
-            Positioned(
-              top: 130,
-              right: 16,
-              child: FloatingActionButton(
-                heroTag: 'picker_my_location',
-                backgroundColor: Theme.of(context).colorScheme.primary,
-                foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                mini: true,
-                tooltip: 'Lokasi Saya',
-                onPressed: _goToMyLocation,
-                child: const Icon(Icons.my_location),
-              ),
-            ),
-
-          // panel bawah: info jarak + tombol konfirmasi
           Positioned(
             bottom: 16,
             left: 12,
@@ -341,60 +529,114 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_isCalculating)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            SizedBox(width: 10),
-                            Text('Menghitung rute...'),
-                          ],
-                        ),
-                      )
-                    else if (_errorText != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          _errorText!,
-                          style: const TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    else if (_distanceMeters != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          'Jarak rute: ${(_distanceMeters! / 1000).toStringAsFixed(2)} km',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    const Text(
+                      'Konfirmasi lokasi',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _addressController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Label alamat',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Row(
+                    //   children: [
+                    //     Expanded(
+                    //       child: _buildSummaryChip(
+                    //         label: 'Type',
+                    //         value: _selectedType == _LocationType.pickup
+                    //             ? 'Pickup'
+                    //             : 'Destination',
+                    //         color: _selectedType == _LocationType.pickup
+                    //             ? Colors.green
+                    //             : Colors.red,
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildLocationPreview(
+                            'Pickup',
+                            _pickupAddress,
+                            _pickupLat,
+                            _pickupLng,
+                            Colors.green,
                           ),
                         ),
-                      )
-                    else
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          'Pilih titik pickup & tujuan',
-                          style: TextStyle(color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildLocationPreview(
+                            'Destination',
+                            _destinationAddress,
+                            _destinationLat,
+                            _destinationLng,
+                            Colors.red,
+                          ),
                         ),
-                      ),
+                      ],
+                    ),
+                    // if (_isSearching) ...[
+                    //   const SizedBox(height: 12),
+                    //   const Row(
+                    //     mainAxisAlignment: MainAxisAlignment.center,
+                    //     children: [
+                    //       SizedBox(
+                    //         width: 18,
+                    //         height: 18,
+                    //         child: CircularProgressIndicator(strokeWidth: 2),
+                    //       ),
+                    //       SizedBox(width: 10),
+                    //       Text('Mencari alamat...'),
+                    //     ],
+                    //   ),
+                    // ] else if (_isLoadingAddress) ...[
+                    //   const SizedBox(height: 12),
+                    //   const Row(
+                    //     mainAxisAlignment: MainAxisAlignment.center,
+                    //     children: [
+                    //       SizedBox(
+                    //         width: 18,
+                    //         height: 18,
+                    //         child: CircularProgressIndicator(strokeWidth: 2),
+                    //       ),
+                    //       SizedBox(width: 10),
+                    //       Text('Mengambil alamat lokasi...'),
+                    //     ],
+                    //   ),
+                    // ] else if (_searchError != null) ...[
+                    //   const SizedBox(height: 12),
+                    //   Text(
+                    //     _searchError!,
+                    //     textAlign: TextAlign.center,
+                    //     style: const TextStyle(color: Colors.red),
+                    //   ),
+                    // ],
+                    const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                              Theme.of(context).colorScheme.secondary,
-                          foregroundColor:
-                              Theme.of(context).colorScheme.onSecondary,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.secondary,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onSecondary,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -419,22 +661,113 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
     );
   }
 
+  Widget _buildSearchResultsPanel() {
+    if (_isSearching) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 18),
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+
+    if (_searchResults.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            _searchError ?? 'Tidak ada hasil pencarian',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: 4),
+      itemCount: _searchResults.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final result = _searchResults[index];
+        final title = (result['display_name'] as String?) ?? 'Alamat';
+
+        return ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 4,
+          ),
+          title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+          trailing: const Icon(Icons.north_east, size: 18),
+          onTap: () => _onSearchResultSelected(result),
+        );
+      },
+    );
+  }
+
+
+  Widget _buildLocationPreview(
+    String label,
+    String? address,
+    double? lat,
+    double? lng,
+    Color color,
+  ) {
+    final hasValue = address != null && lat != null && lng != null;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasValue ? address : 'Belum dipilih',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildModeButton({
     required String label,
     required IconData icon,
     required bool active,
-    required Color color,
+    required MaterialColor color,
     required VoidCallback onTap,
   }) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, color: active ? Colors.white : color, size: 18),
-      label: Text(label),
-      style: OutlinedButton.styleFrom(
-        backgroundColor: active ? color : Colors.transparent,
-        foregroundColor: active ? Colors.white : color,
-        side: BorderSide(color: color),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    return Expanded(
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: active ? color.shade50 : null,
+          foregroundColor: active ? color : null,
+          side: BorderSide(color: active ? color : Colors.grey),
+        ),
       ),
     );
   }
