@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/order_service.dart';
 import '../services/routing_service.dart';
 import '../services/pricing_service.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import 'customer_map_picker_screen.dart';
 import 'customer_waiting_screen.dart';
-
-// farell: dummy customer id sementara, nanti diganti FirebaseAuth UID setelah login dibuat
-const String kDummyCustomerId = 'customer_test_001';
 
 class CustomerCreateOrderScreen extends StatefulWidget {
   const CustomerCreateOrderScreen({super.key});
@@ -205,8 +204,10 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      final customerId =
+          context.read<AuthViewModel>().currentUser?.uid ?? '';
       final newOrderId = await _orderService.createOrder(
-        customerId: kDummyCustomerId,
+        customerId: customerId,
         pickupAddress: _pickupAddress?.trim() ?? '',
         pickupLat: _pickupLat!,
         pickupLng: _pickupLng!,

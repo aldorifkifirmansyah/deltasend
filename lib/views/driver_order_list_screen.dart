@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../services/order_service.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import 'map_driver_screen.dart';
-
-// farell: dummy driver id sementara, nanti diganti dari auth setelah login dibuat
-const String kDummyDriverId = 'driver_test_001';
 
 class DriverOrderListScreen extends StatefulWidget {
   const DriverOrderListScreen({super.key});
@@ -18,6 +17,14 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
 
   // orderId yang sedang diproses, biar tombolnya bisa di-disable & loading
   String? _processingOrderId;
+
+  late final String _driverId;
+
+  @override
+  void initState() {
+    super.initState();
+    _driverId = context.read<AuthViewModel>().currentUser?.uid ?? '';
+  }
 
   void _openMap(String orderId) {
     // push (bukan pushReplacement) supaya back dari peta kembali ke daftar ini,
@@ -37,7 +44,7 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
     try {
       await _orderService.acceptOrder(
         orderId: order.orderId,
-        driverId: kDummyDriverId,
+        driverId: _driverId,
       );
 
       if (!mounted) return;
@@ -54,16 +61,8 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Order Driver'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-      ),
-      // StreamBuilder order aktif membungkus body supaya bagian "Order Tersedia"
-      // tahu apakah driver sudah punya order aktif (untuk disable tombol ambil).
-      body: StreamBuilder<List<OrderModel>>(
-        stream: _orderService.watchActiveOrdersForDriver(kDummyDriverId),
+    return StreamBuilder<List<OrderModel>>(
+        stream: _orderService.watchActiveOrdersForDriver(_driverId),
         builder: (context, activeSnapshot) {
           final activeOrders = activeSnapshot.data ?? [];
           final hasActive = activeOrders.isNotEmpty;
@@ -84,7 +83,6 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
             ],
           );
         },
-      ),
     );
   }
 
