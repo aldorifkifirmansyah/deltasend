@@ -18,4 +18,13 @@ class UserModel {
       role: data['role'] ?? 'customer',
     );
   }
+
+  UserModel copyWith({String? uid, String? email, String? name, String? role}) {
+    return UserModel(
+      uid: uid ?? this.uid,
+      email: email ?? this.email,
+      name: name ?? this.name,
+      role: role ?? this.role,
+    );
+  }
 }
