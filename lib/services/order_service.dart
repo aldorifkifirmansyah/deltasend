@@ -135,6 +135,62 @@ class OrderService {
     });
   }
 
+  // 6b. stream completed order milik customer yang belum dirating
+  Stream<List<OrderModel>> watchCompletedUnratedOrders(String customerId) {
+    return _db
+        .collection('orders')
+        .where('customer_id', isEqualTo: customerId)
+        .snapshots()
+        .map((snapshot) {
+      final orders = snapshot.docs
+          .map((doc) => OrderModel.fromFirestore(doc))
+          .where((order) =>
+              order.status == OrderStatus.completed && order.rating == null)
+          .toList();
+
+      orders.sort((a, b) {
+        final aDate = a.updatedAt ?? a.createdAt ?? DateTime(0);
+        final bDate = b.updatedAt ?? b.createdAt ?? DateTime(0);
+        return bDate.compareTo(aDate);
+      });
+
+      return orders;
+    });
+  }
+
+  // 6c. submit rating: simpan ke order + hitung ulang rata-rata rating driver
+  Future<void> submitRating({
+    required String orderId,
+    required String driverId,
+    required int rating,
+  }) async {
+    await _db.collection('orders').doc(orderId).update({
+      'rating': rating,
+      'updated_at': FieldValue.serverTimestamp(),
+    });
+
+    final snapshot = await _db
+        .collection('orders')
+        .where('driver_id', isEqualTo: driverId)
+        .get();
+
+    final ratings = snapshot.docs
+        .map((doc) => OrderModel.fromFirestore(doc))
+        .where((order) =>
+            order.status == OrderStatus.completed && order.rating != null)
+        .map((order) => order.rating!)
+        .toList();
+
+    if (ratings.isEmpty) return;
+
+    final avg = ratings.reduce((a, b) => a + b) / ratings.length;
+
+    await _db.collection('users').doc(driverId).set({
+      'rating_avg': avg,
+      'rating_count': ratings.length,
+    }, SetOptions(merge: true));
+  }
+
   // 7. method buat customer bikin order baru (status awal: pending)
   Future<String> createOrder({
     required String customerId,

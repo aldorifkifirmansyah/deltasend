@@ -32,6 +32,8 @@ class OrderModel {
 
   OrderStatus status;
 
+  final int? rating;
+
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -50,6 +52,7 @@ class OrderModel {
     this.distanceKm = 0.0,
     this.totalCost = 0.0,
     this.proofPhotoUrl = '',
+    this.rating,
     this.createdAt,
     this.updatedAt,
   });
@@ -94,6 +97,8 @@ class OrderModel {
         (e) => e.name == data['status'],
         orElse: () => OrderStatus.pending,
       ),
+
+      rating: data['rating'] as int?,
 
       createdAt: (data['created_at'] as Timestamp?)?.toDate(),
       updatedAt: (data['updated_at'] as Timestamp?)?.toDate(),
