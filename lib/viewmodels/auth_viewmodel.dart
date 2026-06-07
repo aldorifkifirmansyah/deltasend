@@ -7,7 +7,8 @@ import '../models/user_model.dart';
 class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  bool _googleInitialized = false;
 
   UserModel? _currentUser;
   bool _isLoading = false;
@@ -93,13 +94,14 @@ class AuthViewModel extends ChangeNotifier {
     _errorMessage = null;
     _setLoading(true);
     try {
-      final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        return false; // dibatalkan user
+      if (!_googleInitialized) {
+        await _googleSignIn.initialize();
+        _googleInitialized = true;
       }
-      final googleAuth = await googleUser.authentication;
+
+      final googleUser = await _googleSignIn.authenticate();
+      final googleAuth = googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
       final cred = await _auth.signInWithCredential(credential);
@@ -118,6 +120,11 @@ class AuthViewModel extends ChangeNotifier {
         );
       }
       return true;
+    } on GoogleSignInException catch (e) {
+      if (e.code != GoogleSignInExceptionCode.canceled) {
+        _errorMessage = 'Gagal login Google: ${e.description ?? e.code.name}';
+      }
+      return false;
     } on FirebaseAuthException catch (e) {
       _errorMessage = _mapAuthError(e);
       return false;
