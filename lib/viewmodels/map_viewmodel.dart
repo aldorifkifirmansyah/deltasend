@@ -60,7 +60,6 @@ class MapViewModel extends ChangeNotifier {
     if (_currentLocation == null) return;
 
     if (_vsync == null) {
-      // Fallback jika tidak ada vsync (tidak bisa animasi)
       mapController.fitCamera(
         CameraFit.coordinates(
           coordinates: [_currentLocation!],
@@ -71,7 +70,6 @@ class MapViewModel extends ChangeNotifier {
       return;
     }
 
-    // Mendapatkan target parameter dari _currentLocation beserta padding
     final targetCamera = CameraFit.coordinates(
       coordinates: [_currentLocation!],
       padding: const EdgeInsets.only(bottom: 250.0),
@@ -98,7 +96,7 @@ class MapViewModel extends ChangeNotifier {
     _cameraAnimController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: _vsync!,
-    ); // Animasi yang smooth (sliding)
+    );
 
     final Animation<double> animation = CurvedAnimation(
       parent: _cameraAnimController!,
@@ -128,6 +126,8 @@ class MapViewModel extends ChangeNotifier {
       targetPoint.longitude,
     );
   }
+
+  double get distanceInMeters => _distanceInMeters;
 
   String get distanceToTarget {
     if (_currentLocation == null || _currentOrder == null) return '-';
@@ -212,7 +212,7 @@ class MapViewModel extends ChangeNotifier {
           top: 50.0,
           left: 50.0,
           right: 50.0,
-          bottom: 250.0, // Extra padding bawah agar tidak tertutup Card UI
+          bottom: 250.0,
         ),
       ),
     );
@@ -337,7 +337,6 @@ class MapViewModel extends ChangeNotifier {
 
       _currentOrder!.status = nextStatus;
 
-      // Recalculate proximity based on new target
       if (_currentLocation != null && nextStatus != OrderStatus.completed) {
         LatLng newTarget = nextStatus == OrderStatus.pickingUp
             ? _currentOrder!.pickupLocation
@@ -363,6 +362,29 @@ class MapViewModel extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Gagal update status order: $e');
+    }
+  }
+
+  Future<void> completeOrderWithPhoto({
+    required String orderId,
+    required String base64Photo,
+  }) async {
+    if (_currentOrder == null) return;
+
+    try {
+      await _orderService.updateOrderWithProofPhoto(
+        orderId: orderId,
+        proofPhotoUrl: base64Photo,
+      );
+
+      _currentOrder!.status = OrderStatus.completed;
+      _isAtLocation = false;
+      _routePoints.clear();
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Gagal complete order dengan photo: $e');
+      rethrow;
     }
   }
 }

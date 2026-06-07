@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../viewmodels/map_viewmodel.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
 
 class MapDriverScreen extends StatefulWidget {
   final String orderId;
@@ -17,6 +19,9 @@ class MapDriverScreen extends StatefulWidget {
 
 class _MapDriverScreenState extends State<MapDriverScreen>
     with TickerProviderStateMixin {
+  String _base64Photo = '';
+  bool _isLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -26,6 +31,63 @@ class _MapDriverScreenState extends State<MapDriverScreen>
       viewModel.fetchOrderData(widget.orderId);
       viewModel.initLocation();
     });
+  }
+
+  Future<void> _captureProofPhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 20,
+        maxWidth: 500,
+        maxHeight: 500,
+      );
+
+      if (photo != null) {
+        final bytes = await photo.readAsBytes();
+        setState(() {
+          _base64Photo = base64Encode(bytes);
+        });
+      }
+    } catch (e) {
+      debugPrint('Gagal capture photo: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal mengambil foto: $e')));
+      }
+    }
+  }
+
+  Future<void> _completeOrderWithPhoto() async {
+    if (_base64Photo.isEmpty || widget.orderId.isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final viewModel = context.read<MapViewModel>();
+      await viewModel.completeOrderWithPhoto(
+        orderId: widget.orderId,
+        base64Photo: _base64Photo,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pesanan berhasil diselesaikan')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Gagal complete order: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal menyelesaikan pesanan: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -38,16 +100,43 @@ class _MapDriverScreenState extends State<MapDriverScreen>
     LatLng? targetPoint;
     String statusText = 'Memuat Pesanan...';
     String buttonText = 'Selesai';
+    VoidCallback? buttonOnPressed;
+    bool isButtonEnabled = false;
 
     if (currentOrder != null) {
       if (currentOrder.status == OrderStatus.pickingUp) {
         targetPoint = currentOrder.pickupLocation;
         statusText = 'Menuju Lokasi Penjemputan';
         buttonText = 'Pick Up Pesanan';
+        buttonOnPressed = viewModel.isAtLocation
+            ? () => viewModel.updateStatus()
+            : null;
+        isButtonEnabled = viewModel.isAtLocation;
       } else if (currentOrder.status == OrderStatus.delivering) {
         targetPoint = currentOrder.destinationLocation;
         statusText = 'Menuju Lokasi Pengiriman';
-        buttonText = 'Selesaikan Pesanan';
+
+        if (viewModel.distanceToTarget
+                    .replaceAll(' Meter', '')
+                    .replaceAll(' KM', '') !=
+                '-' &&
+            viewModel.distanceInMeters > 50) {
+          buttonText = 'Menuju Lokasi Tujuan';
+          buttonOnPressed = null;
+          isButtonEnabled = false;
+        } else if (_base64Photo.isEmpty && viewModel.distanceInMeters <= 50) {
+          buttonText = 'Ambil Foto Bukti Pengantaran';
+          buttonOnPressed = _captureProofPhoto;
+          isButtonEnabled = true;
+        } else if (_base64Photo.isNotEmpty) {
+          buttonText = 'Selesaikan Pesanan';
+          buttonOnPressed = _isLoading ? null : _completeOrderWithPhoto;
+          isButtonEnabled = !_isLoading;
+        } else {
+          buttonText = 'Menuju Lokasi Tujuan';
+          buttonOnPressed = null;
+          isButtonEnabled = false;
+        }
       } else {
         statusText = 'Pesanan Selesai';
       }
@@ -68,7 +157,6 @@ class _MapDriverScreenState extends State<MapDriverScreen>
               initialZoom: 15.0,
               onPositionChanged: (position, hasGesture) {
                 if (hasGesture && viewModel.isAutoCenter) {
-                  // Berhenti auto-center jika user secara sengaja menggeser peta
                   viewModel.disableAutoCenter();
                 }
               },
@@ -106,7 +194,11 @@ class _MapDriverScreenState extends State<MapDriverScreen>
                       point: targetPoint,
                       width: 40,
                       height: 40,
-                      child: Icon(CupertinoIcons.location_solid, color: Colors.red, size: 35),
+                      child: Icon(
+                        CupertinoIcons.location_solid,
+                        color: Colors.red,
+                        size: 35,
+                      ),
                     ),
                 ],
               ),
@@ -182,29 +274,35 @@ class _MapDriverScreenState extends State<MapDriverScreen>
                       SizedBox(
                         width: double.infinity,
                         height: 48,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.secondary,
-                            foregroundColor: Theme.of(
-                              context,
-                            ).colorScheme.onSecondary,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: viewModel.isAtLocation
-                              ? () => viewModel.updateStatus()
-                              : null,
-                          child: Text(
-                            buttonText,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
+                        child: _isLoading
+                            ? Center(
+                                child: CircularProgressIndicator(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.secondary,
+                                ),
+                              )
+                            : ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isButtonEnabled
+                                      ? Theme.of(context).colorScheme.secondary
+                                      : Colors.grey[400],
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.onSecondary,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: buttonOnPressed,
+                                child: Text(
+                                  buttonText,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
                       ),
                     ],
                   ),

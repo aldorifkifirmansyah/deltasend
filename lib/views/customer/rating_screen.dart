@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
+import 'dart:convert';
 
 class RatingScreen extends StatefulWidget {
   final OrderModel order;
@@ -18,8 +19,9 @@ class _RatingScreenState extends State<RatingScreen> {
   bool _isSubmitting = false;
 
   void _showSnack(String message) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _submit() async {
@@ -77,6 +79,57 @@ class _RatingScreenState extends State<RatingScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
+            if (order.proofPhotoUrl.isNotEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Bukti Pengantaran',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      base64Decode(order.proofPhotoUrl),
+                      width: double.infinity,
+                      height: 200,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: double.infinity,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: Text('Gagal memuat gambar bukti.'),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: Text(
+                  'Driver tidak menyertakan foto bukti.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(5, (i) {

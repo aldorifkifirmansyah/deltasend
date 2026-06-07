@@ -49,6 +49,18 @@ class OrderService {
     });
   }
 
+  // 4b. method buat update order dengan proof photo dan tandai completed
+  Future<void> updateOrderWithProofPhoto({
+    required String orderId,
+    required String proofPhotoUrl,
+  }) async {
+    await _db.collection('orders').doc(orderId).update({
+      'proof_photo_url': proofPhotoUrl,
+      'status': OrderStatus.completed.name,
+      'updated_at': FieldValue.serverTimestamp(),
+    });
+  }
+
   // 5. method buat listen perubahan order dengan status 'pending'
   Stream<List<OrderModel>> watchPendingOrders() {
     return _db
@@ -56,18 +68,18 @@ class OrderService {
         .where('status', isEqualTo: OrderStatus.pending.name)
         .snapshots()
         .map((snapshot) {
-      final orders = snapshot.docs.map((doc) {
-        return OrderModel.fromFirestore(doc);
-      }).toList();
+          final orders = snapshot.docs.map((doc) {
+            return OrderModel.fromFirestore(doc);
+          }).toList();
 
-      orders.sort((a, b) {
-        final aDate = a.createdAt ?? DateTime(0);
-        final bDate = b.createdAt ?? DateTime(0);
-        return bDate.compareTo(aDate);
-      });
+          orders.sort((a, b) {
+            final aDate = a.createdAt ?? DateTime(0);
+            final bDate = b.createdAt ?? DateTime(0);
+            return bDate.compareTo(aDate);
+          });
 
-      return orders;
-    });
+          return orders;
+        });
   }
 
   // 5b. method buat listen order aktif milik driver (pickingUp / delivering)
@@ -79,21 +91,24 @@ class OrderService {
         .where('driver_id', isEqualTo: driverId)
         .snapshots()
         .map((snapshot) {
-      const activeStatuses = {OrderStatus.pickingUp, OrderStatus.delivering};
+          const activeStatuses = {
+            OrderStatus.pickingUp,
+            OrderStatus.delivering,
+          };
 
-      final orders = snapshot.docs
-          .map((doc) => OrderModel.fromFirestore(doc))
-          .where((order) => activeStatuses.contains(order.status))
-          .toList();
+          final orders = snapshot.docs
+              .map((doc) => OrderModel.fromFirestore(doc))
+              .where((order) => activeStatuses.contains(order.status))
+              .toList();
 
-      orders.sort((a, b) {
-        final aDate = a.updatedAt ?? a.createdAt ?? DateTime(0);
-        final bDate = b.updatedAt ?? b.createdAt ?? DateTime(0);
-        return bDate.compareTo(aDate);
-      });
+          orders.sort((a, b) {
+            final aDate = a.updatedAt ?? a.createdAt ?? DateTime(0);
+            final bDate = b.updatedAt ?? b.createdAt ?? DateTime(0);
+            return bDate.compareTo(aDate);
+          });
 
-      return orders;
-    });
+          return orders;
+        });
   }
 
   // 5c. cek apakah driver masih punya order aktif (pickingUp / delivering)
@@ -151,20 +166,23 @@ class OrderService {
         .where('customer_id', isEqualTo: customerId)
         .snapshots()
         .map((snapshot) {
-      final orders = snapshot.docs
-          .map((doc) => OrderModel.fromFirestore(doc))
-          .where((order) =>
-              order.status == OrderStatus.completed && order.rating == null)
-          .toList();
+          final orders = snapshot.docs
+              .map((doc) => OrderModel.fromFirestore(doc))
+              .where(
+                (order) =>
+                    order.status == OrderStatus.completed &&
+                    order.rating == null,
+              )
+              .toList();
 
-      orders.sort((a, b) {
-        final aDate = a.updatedAt ?? a.createdAt ?? DateTime(0);
-        final bDate = b.updatedAt ?? b.createdAt ?? DateTime(0);
-        return bDate.compareTo(aDate);
-      });
+          orders.sort((a, b) {
+            final aDate = a.updatedAt ?? a.createdAt ?? DateTime(0);
+            final bDate = b.updatedAt ?? b.createdAt ?? DateTime(0);
+            return bDate.compareTo(aDate);
+          });
 
-      return orders;
-    });
+          return orders;
+        });
   }
 
   // 6c. submit rating: simpan ke order + hitung ulang rata-rata rating driver
@@ -185,8 +203,10 @@ class OrderService {
 
     final ratings = snapshot.docs
         .map((doc) => OrderModel.fromFirestore(doc))
-        .where((order) =>
-            order.status == OrderStatus.completed && order.rating != null)
+        .where(
+          (order) =>
+              order.status == OrderStatus.completed && order.rating != null,
+        )
         .map((order) => order.rating!)
         .toList();
 
