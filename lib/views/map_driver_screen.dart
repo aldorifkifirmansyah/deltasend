@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../viewmodels/map_viewmodel.dart';
+import 'package:flutter/cupertino.dart';
 
 class MapDriverScreen extends StatefulWidget {
   final String orderId;
@@ -105,7 +106,7 @@ class _MapDriverScreenState extends State<MapDriverScreen>
                       point: targetPoint,
                       width: 40,
                       height: 40,
-                      child: Icon(Icons.flag, color: Colors.red, size: 35),
+                      child: Icon(CupertinoIcons.location_solid, color: Colors.red, size: 35),
                     ),
                 ],
               ),
@@ -121,7 +122,7 @@ class _MapDriverScreenState extends State<MapDriverScreen>
                 foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 mini: true,
                 onPressed: () => viewModel.enableAutoCenter(),
-                child: const Icon(Icons.my_location),
+                child: const Icon(CupertinoIcons.location_north_fill),
               ),
             ),
 

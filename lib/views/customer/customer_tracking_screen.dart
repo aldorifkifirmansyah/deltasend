@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../services/routing_service.dart';
+import 'package:flutter/cupertino.dart';
 
 class CustomerTrackingScreen extends StatefulWidget {
   final String orderId;
@@ -88,10 +89,24 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
           }
 
           final destPos = order.destinationLocation;
+          final pickupPos = order.pickupLocation;
           final driverPos = order.driverLocation;
 
-          if (driverPos != null && order.status != OrderStatus.completed) {
-            _maybeUpdateRoute(driverPos, destPos);
+          // Determine target position based on order status
+          LatLng? targetPos;
+          if (order.status == OrderStatus.accepted ||
+              order.status == OrderStatus.pickingUp) {
+            // Driver is heading to pickup location
+            targetPos = pickupPos;
+          } else if (order.status == OrderStatus.delivering) {
+            // Driver is heading to destination location
+            targetPos = destPos;
+          }
+
+          if (driverPos != null &&
+              targetPos != null &&
+              order.status != OrderStatus.completed) {
+            _maybeUpdateRoute(driverPos, targetPos);
           }
 
           return Stack(
@@ -120,16 +135,45 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                     ),
                   MarkerLayer(
                     markers: [
-                      Marker(
-                        point: destPos,
-                        width: 40,
-                        height: 40,
-                        child: const Icon(
-                          Icons.flag,
-                          color: Colors.red,
-                          size: 35,
+                      // Pickup marker - show during accepted/pickingUp phases
+                      if (order.status == OrderStatus.accepted ||
+                          order.status == OrderStatus.pickingUp)
+                        Marker(
+                          point: order.pickupLocation,
+                          width: 40,
+                          height: 40,
+                          child: const Icon(
+                            CupertinoIcons.location_north_fill,
+                            color: Colors.orange,
+                            size: 35,
+                          ),
+                        )
+                      // Destination marker - show during delivering/completed phases
+                      else if (order.status == OrderStatus.delivering ||
+                          order.status == OrderStatus.completed)
+                        Marker(
+                          point: order.destinationLocation,
+                          width: 40,
+                          height: 40,
+                          child: const Icon(
+                            CupertinoIcons.location_solid,
+                            color: Colors.red,
+                            size: 35,
+                          ),
                         ),
-                      ),
+                      // Pickup reference marker - show during delivering phase for context
+                      if (order.status == OrderStatus.delivering)
+                        Marker(
+                          point: order.pickupLocation,
+                          width: 40,
+                          height: 40,
+                          child: const Icon(
+                            CupertinoIcons.location_north_fill,
+                            color: Colors.orange,
+                            size: 30,
+                          ),
+                        ),
+                      // Driver marker
                       if (driverPos != null)
                         Marker(
                           point: driverPos,
@@ -179,9 +223,8 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).popUntil(
-                    (route) => route.isFirst,
-                  ),
+                  onPressed: () =>
+                      Navigator.of(context).popUntil((route) => route.isFirst),
                   child: const Text('Kembali ke Home'),
                 ),
               ),
@@ -190,6 +233,17 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
         ),
       );
     }
+
+    // Determine current target and description based on status
+    final isHeadingToPickup =
+        order.status == OrderStatus.accepted ||
+        order.status == OrderStatus.pickingUp;
+    final locationLabel = isHeadingToPickup
+        ? 'Lokasi Penjemputan'
+        : 'Lokasi Tujuan';
+    final locationAddress = isHeadingToPickup
+        ? order.pickupAddress
+        : order.destinationAddress;
 
     return Card(
       elevation: 8,
@@ -202,16 +256,13 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
           children: [
             _buildStatusChip(order.status),
             const SizedBox(height: 12),
-            const Text(
-              'Tujuan',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+            Text(
+              locationLabel,
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
             Text(
-              order.destinationAddress,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+              locationAddress,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             if (order.driverLocation == null) ...[
               const SizedBox(height: 12),
@@ -227,11 +278,13 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
   }
 
   Widget _buildStatusChip(OrderStatus status) {
-    final label = status == OrderStatus.pickingUp
+    final label = status == OrderStatus.accepted
+        ? 'Menuju Lokasi Penjemputan'
+        : status == OrderStatus.pickingUp
         ? 'Menjemput'
         : status == OrderStatus.delivering
-            ? 'Mengantar'
-            : status.name;
+        ? 'Mengantar'
+        : status.name;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(

@@ -4,6 +4,7 @@ import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import 'map_driver_screen.dart';
+import 'package:flutter/cupertino.dart';
 
 class DriverOrderListScreen extends StatefulWidget {
   const DriverOrderListScreen({super.key});
@@ -30,9 +31,7 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
     // push (bukan pushReplacement) supaya back dari peta kembali ke daftar ini,
     // sehingga driver tetap bisa melihat & melanjutkan order aktifnya.
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MapDriverScreen(orderId: orderId),
-      ),
+      MaterialPageRoute(builder: (_) => MapDriverScreen(orderId: orderId)),
     );
   }
 
@@ -51,9 +50,9 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
       _openMap(order.orderId);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal mengambil order: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal mengambil order: $e')));
     } finally {
       if (mounted) setState(() => _processingOrderId = null);
     }
@@ -62,27 +61,27 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<OrderModel>>(
-        stream: _orderService.watchActiveOrdersForDriver(_driverId),
-        builder: (context, activeSnapshot) {
-          final activeOrders = activeSnapshot.data ?? [];
-          final hasActive = activeOrders.isNotEmpty;
+      stream: _orderService.watchActiveOrdersForDriver(_driverId),
+      builder: (context, activeSnapshot) {
+        final activeOrders = activeSnapshot.data ?? [];
+        final hasActive = activeOrders.isNotEmpty;
 
-          return ListView(
-            padding: const EdgeInsets.all(12),
-            children: [
-              _buildSectionTitle('Order Aktif Saya'),
-              if (activeOrders.length > 1)
-                _buildInfoText(
-                  'Terdeteksi ${activeOrders.length} order aktif (data testing lama). '
-                  'Selesaikan order-order ini; ke depan driver hanya boleh 1 order aktif.',
-                ),
-              _buildActiveContent(activeSnapshot),
-              const SizedBox(height: 20),
-              _buildSectionTitle('Order Tersedia'),
-              _buildPendingOrdersSection(hasActive: hasActive),
-            ],
-          );
-        },
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            _buildSectionTitle('Order Aktif Saya'),
+            if (activeOrders.length > 1)
+              _buildInfoText(
+                'Terdeteksi ${activeOrders.length} order aktif (data testing lama). '
+                'Selesaikan order-order ini; ke depan driver hanya boleh 1 order aktif.',
+              ),
+            _buildActiveContent(activeSnapshot),
+            const SizedBox(height: 20),
+            _buildSectionTitle('Order Tersedia'),
+            _buildPendingOrdersSection(hasActive: hasActive),
+          ],
+        );
+      },
     );
   }
 
@@ -154,8 +153,7 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
                       ? 'Selesaikan order aktif dulu'
                       : 'Ambil Order',
                   isProcessing: _processingOrderId == order.orderId,
-                  onPressed:
-                      isLocked ? null : () => _ambilOrder(order),
+                  onPressed: isLocked ? null : () => _ambilOrder(order),
                 ),
               )
               .toList(),
@@ -222,14 +220,14 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
             ),
             const SizedBox(height: 12),
             _buildLocationRow(
-              Icons.my_location,
+              CupertinoIcons.location_north_fill,
               Colors.green,
               'Jemput',
               order.pickupAddress,
             ),
             const SizedBox(height: 8),
             _buildLocationRow(
-              Icons.flag,
+              CupertinoIcons.location_solid,
               Colors.red,
               'Tujuan',
               order.destinationAddress,
@@ -300,8 +298,8 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
     final label = status == OrderStatus.pickingUp
         ? 'Menjemput'
         : status == OrderStatus.delivering
-            ? 'Mengantar'
-            : status.name;
+        ? 'Mengantar'
+        : status.name;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(

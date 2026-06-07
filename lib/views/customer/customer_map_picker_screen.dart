@@ -6,7 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter/cupertino.dart';
 
-import '../services/geocoding_service.dart';
+import '../../services/geocoding_service.dart';
 
 enum _LocationType { pickup, destination }
 
@@ -99,32 +99,6 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
     super.dispose();
   }
 
-  Future<void> _initCurrentLocation() async {
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return;
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        return;
-      }
-
-      final pos = await Geolocator.getCurrentPosition();
-      if (!mounted) return;
-
-      final loc = LatLng(pos.latitude, pos.longitude);
-
-      if (_selectedPoint == null) {
-        try {
-          _mapController.move(loc, 15.0);
-        } catch (_) {}
-      }
-    } catch (_) {}
-  }
 
   void _syncActiveSelection(String address, double lat, double lng) {
     setState(() {

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:latlong2/latlong.dart';
-import '../services/order_service.dart';
-import '../services/routing_service.dart';
-import '../services/pricing_service.dart';
-import '../viewmodels/auth_viewmodel.dart';
+import '../../services/order_service.dart';
+import '../../services/routing_service.dart';
+import '../../services/pricing_service.dart';
+import '../../viewmodels/auth_viewmodel.dart';
 import 'customer_map_picker_screen.dart';
 import 'customer_waiting_screen.dart';
 

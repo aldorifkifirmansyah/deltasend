@@ -317,35 +317,52 @@ class MapViewModel extends ChangeNotifier {
   }
 
   Future<void> updateStatus() async {
-  if (_currentOrder == null) return;
+    if (_currentOrder == null) return;
 
-  OrderStatus? nextStatus;
+    OrderStatus? nextStatus;
 
-  if (_currentOrder!.status == OrderStatus.pickingUp) {
-    nextStatus = OrderStatus.delivering;
-  } else if (_currentOrder!.status == OrderStatus.delivering) {
-    nextStatus = OrderStatus.completed;
-  }
-
-  if (nextStatus == null) return;
-
-  try {
-    await _orderService.updateOrderStatus(
-      orderId: _currentOrder!.orderId,
-      status: nextStatus.name,
-    );
-
-    _currentOrder!.status = nextStatus;
-
-    if (nextStatus == OrderStatus.completed) {
-      _routePoints.clear();
-    } else if (_currentLocation != null) {
-      await loadRoute(_currentLocation!);
+    if (_currentOrder!.status == OrderStatus.pickingUp) {
+      nextStatus = OrderStatus.delivering;
+    } else if (_currentOrder!.status == OrderStatus.delivering) {
+      nextStatus = OrderStatus.completed;
     }
 
-    notifyListeners();
-  } catch (e) {
-    debugPrint('Gagal update status order: $e');
+    if (nextStatus == null) return;
+
+    try {
+      await _orderService.updateOrderStatus(
+        orderId: _currentOrder!.orderId,
+        status: nextStatus.name,
+      );
+
+      _currentOrder!.status = nextStatus;
+
+      // Recalculate proximity based on new target
+      if (_currentLocation != null && nextStatus != OrderStatus.completed) {
+        LatLng newTarget = nextStatus == OrderStatus.pickingUp
+            ? _currentOrder!.pickupLocation
+            : _currentOrder!.destinationLocation;
+
+        double distanceToNewTarget = Geolocator.distanceBetween(
+          _currentLocation!.latitude,
+          _currentLocation!.longitude,
+          newTarget.latitude,
+          newTarget.longitude,
+        );
+
+        _isAtLocation = distanceToNewTarget < 50;
+      } else if (nextStatus == OrderStatus.completed) {
+        _isAtLocation = false;
+        _routePoints.clear();
+      }
+
+      if (_currentLocation != null && nextStatus != OrderStatus.completed) {
+        await loadRoute(_currentLocation!);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Gagal update status order: $e');
+    }
   }
-}
 }

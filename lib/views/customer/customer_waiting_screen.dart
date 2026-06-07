@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../viewmodels/customer_order_viewmodel.dart';
-import 'customer/customer_tracking_screen.dart';
+import '../../viewmodels/customer_order_viewmodel.dart';
+import 'customer_tracking_screen.dart';
 
 class CustomerWaitingScreen extends StatefulWidget {
   final String orderId;
