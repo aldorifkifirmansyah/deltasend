@@ -326,19 +326,39 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
             _totalCost == null ? '-' : 'Rp ${_totalCost!.toStringAsFixed(0)}',
             highlight: true,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           _buildSectionTitle('Detail Barang'),
           _buildTextField(
             controller: _itemDescriptionCtrl,
             label: 'Deskripsi Barang',
             validator: _validateRequired,
+            minLines: 3,
+            maxLines: 5,
           ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<WeightCategory>(
             initialValue: _selectedCategory,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Kategori Berat',
-              border: OutlineInputBorder(),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
+                  width: 2,
+                ),
+              ),
               isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
             items: _categories
                 .map(
@@ -358,7 +378,7 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
               });
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           SizedBox(
             height: 50,
             child: ElevatedButton(
@@ -433,18 +453,37 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
     required String label,
     String? Function(String?)? validator,
     String? helperText,
+    int minLines = 1,
+    int maxLines = 1,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: controller,
         validator: validator,
+        minLines: minLines,
+        maxLines: maxLines,
         decoration: InputDecoration(
           labelText: label,
           helperText: helperText,
           helperMaxLines: 2,
-          border: const OutlineInputBorder(),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: Theme.of(context).colorScheme.primary,
+              width: 2,
+            ),
+          ),
           isDense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
         ),
       ),
     );
