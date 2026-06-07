@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:flutter/cupertino.dart';
 
 import '../services/geocoding_service.dart';
 
@@ -33,7 +34,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   Timer? _debounceTimer;
 
-  static const LatLng _defaultCenter = LatLng(-8.1689, 113.7022);
+  static const LatLng _defaultCenter = LatLng(-2.5489, 118.0149);
 
   LatLng? _selectedPoint;
   String? _selectedAddressText;
@@ -57,7 +58,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
     if (widget.initialPickup != null) {
       _pickupLat = widget.initialPickup!.latitude;
       _pickupLng = widget.initialPickup!.longitude;
-      _pickupAddress = 'Lokasi pickup terpilih';
+      _pickupAddress = 'Lokasi jemput terpilih';
     }
     if (widget.initialDestination != null) {
       _destinationLat = widget.initialDestination!.latitude;
@@ -87,8 +88,6 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
         } catch (_) {}
       });
     }
-
-    _initCurrentLocation();
   }
 
   @override
@@ -241,7 +240,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
 
     final resolvedAddress = address?.isNotEmpty == true
         ? address!
-      : 'Lokasi terpilih';
+        : 'Lokasi terpilih';
     _syncActiveSelection(resolvedAddress, lat, lng);
 
     _searchFocusNode.unfocus();
@@ -249,6 +248,85 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
     try {
       _mapController.move(point, 16.0);
     } catch (_) {}
+  }
+
+  Future<void> _useCurrentLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Layanan lokasi tidak diaktifkan')),
+          );
+        }
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Izin lokasi ditolak')));
+        }
+        return;
+      }
+
+      setState(() => _isLoadingAddress = true);
+
+      final position = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
+
+      final point = LatLng(position.latitude, position.longitude);
+
+      setState(() {
+        _selectedPoint = point;
+        _searchResults = [];
+        _searchError = null;
+        _searchController.clear();
+      });
+
+      try {
+        _mapController.move(point, 16.0);
+      } catch (_) {}
+
+      try {
+        final address = await GeocodingService.reverseGeocode(
+          point.latitude,
+          point.longitude,
+        );
+
+        if (!mounted) return;
+
+        final resolvedAddress = (address?.trim().isNotEmpty == true)
+            ? address!.trim()
+            : 'Lokasi saat ini';
+
+        _addressController.text = resolvedAddress;
+        _syncActiveSelection(resolvedAddress, point.latitude, point.longitude);
+      } catch (e) {
+        if (!mounted) return;
+        final fallbackAddress = 'Lokasi saat ini';
+        _addressController.text = fallbackAddress;
+        _syncActiveSelection(fallbackAddress, point.latitude, point.longitude);
+      }
+
+      _searchFocusNode.unfocus();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal mendapatkan lokasi: $e')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingAddress = false);
+      }
+    }
   }
 
   void _confirm() {
@@ -289,7 +367,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _selectedPoint ?? _defaultCenter,
-              initialZoom: 14.0,
+              initialZoom: _selectedPoint != null ? 14.0 : 5.0,
               onTap: (tapPosition, point) => _onMapTap(point),
             ),
             children: [
@@ -305,7 +383,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                       width: 44,
                       height: 44,
                       child: Icon(
-                        Icons.my_location,
+                        CupertinoIcons.location_north_fill,
                         color: Colors.green,
                         size: 36,
                       ),
@@ -316,7 +394,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                       width: 44,
                       height: 44,
                       child: const Icon(
-                        Icons.flag,
+                        CupertinoIcons.location_solid,
                         color: Colors.red,
                         size: 36,
                       ),
@@ -364,23 +442,24 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                               children: [
                                 Expanded(
                                   child: _buildModeButton(
-                                    label: 'Pickup',
-                                    icon: Icons.my_location,
+                                    label: 'Ambil',
+                                    icon: CupertinoIcons.location_north_fill,
                                     active:
                                         _selectedType == _LocationType.pickup,
                                     color: Colors.green,
                                     onTap: () => setState(
-                                      () => _selectedType =
-                                          _LocationType.pickup,
+                                      () =>
+                                          _selectedType = _LocationType.pickup,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: _buildModeButton(
-                                    label: 'Destination',
-                                    icon: Icons.flag,
-                                    active: _selectedType ==
+                                    label: 'Tujuan',
+                                    icon: CupertinoIcons.location_solid,
+                                    active:
+                                        _selectedType ==
                                         _LocationType.destination,
                                     color: Colors.red,
                                     onTap: () => setState(
@@ -414,8 +493,8 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                                                 height: 18,
                                                 child:
                                                     CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                ),
+                                                      strokeWidth: 2,
+                                                    ),
                                               ),
                                             )
                                           : null)
@@ -442,8 +521,9 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
                                   borderSide: BorderSide(
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
                                     width: 1.4,
                                   ),
                                 ),
@@ -455,40 +535,14 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                               ),
                             ),
                           ),
-                          if (!showResults &&
-                              _selectedPoint == null &&
-                              !_searchFocusNode.hasFocus)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                              child: Text(
-                                _selectedPoint == null &&
-                                        _searchController.text.isEmpty
-                                    ? 'Tap peta atau pilih hasil pencarian'
-                                    : '',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                  height: 1.25,
-                                ),
-                              ),
+                          if (focused && _searchController.text.isEmpty)
+                            ListTile(
+                              dense: true,
+                              visualDensity: VisualDensity.compact,
+                              leading: const Icon(Icons.my_location),
+                              title: const Text('Gunakan Lokasi Saat Ini'),
+                              onTap: _useCurrentLocation,
                             ),
-                        if (_selectedPoint != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                            child: Text(
-                              _selectedAddressText ?? 'Tap untuk memilih lokasi',
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade700,
-                                height: 1.25,
-                              ),
-                            ),
-                          ),
                           AnimatedSize(
                             duration: const Duration(milliseconds: 180),
                             curve: Curves.easeOut,
@@ -496,15 +550,13 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                                 ? ConstrainedBox(
                                     constraints: BoxConstraints(
                                       maxHeight:
-                                          _searchResults.isEmpty ||
-                                                  _isSearching
-                                              ? 120
-                                              : (_searchResults.length >= 5
-                                                    ? 280
-                                                    : 64.0 +
-                                                        (_searchResults
-                                                                .length *
-                                                            64.0)),
+                                          _searchResults.isEmpty || _isSearching
+                                          ? 120
+                                          : (_searchResults.length >= 5
+                                                ? 280
+                                                : 64.0 +
+                                                      (_searchResults.length *
+                                                          64.0)),
                                     ),
                                     child: _buildSearchResultsPanel(),
                                   )
@@ -570,7 +622,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                       children: [
                         Expanded(
                           child: _buildLocationPreview(
-                            'Pickup',
+                            'Penjemputan',
                             _pickupAddress,
                             _pickupLat,
                             _pickupLng,
@@ -580,7 +632,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: _buildLocationPreview(
-                            'Destination',
+                            'Tujuan',
                             _destinationAddress,
                             _destinationLat,
                             _destinationLng,
@@ -711,7 +763,6 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
     );
   }
 
-
   Widget _buildLocationPreview(
     String label,
     String? address,
@@ -758,16 +809,14 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
     required MaterialColor color,
     required VoidCallback onTap,
   }) {
-    return Expanded(
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(icon),
-        label: Text(label),
-        style: OutlinedButton.styleFrom(
-          backgroundColor: active ? color.shade50 : null,
-          foregroundColor: active ? color : null,
-          side: BorderSide(color: active ? color : Colors.grey),
-        ),
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon),
+      label: Text(label),
+      style: OutlinedButton.styleFrom(
+        backgroundColor: active ? color.shade50 : null,
+        foregroundColor: active ? color : null,
+        side: BorderSide(color: active ? color : Colors.grey),
       ),
     );
   }
