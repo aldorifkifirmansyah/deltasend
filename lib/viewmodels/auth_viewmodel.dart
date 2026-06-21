@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
+import 'dart:async';
 
 class AuthViewModel extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -159,6 +160,48 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
+  Future<bool> sendPasswordResetEmail(String email) async {
+    _errorMessage = null;
+    _setLoading(true);
+
+    try {
+      await _auth
+          .sendPasswordResetEmail(email: email.trim())
+          .timeout(const Duration(seconds: 15));
+
+      return true;
+    } on TimeoutException {
+      _errorMessage =
+          'Permintaan terlalu lama. Periksa koneksi internet lalu coba kembali.';
+      return false;
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'invalid-email':
+          _errorMessage = 'Format email tidak valid.';
+          break;
+        case 'user-not-found':
+          _errorMessage = 'Akun dengan email tersebut tidak ditemukan.';
+          break;
+        case 'too-many-requests':
+          _errorMessage =
+              'Terlalu banyak permintaan. Silakan coba lagi beberapa saat.';
+          break;
+        case 'network-request-failed':
+          _errorMessage = 'Koneksi internet bermasalah. Periksa jaringan Anda.';
+          break;
+        default:
+          _errorMessage = e.message ?? 'Gagal mengirim email reset password.';
+      }
+
+      return false;
+    } catch (e) {
+      _errorMessage = 'Terjadi kesalahan: $e';
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> signOut() async {
     await _auth.signOut();
     try {
@@ -176,7 +219,8 @@ class AuthViewModel extends ChangeNotifier {
     }
 
     final user = await _loadUserDoc(fbUser.uid);
-    _currentUser = user ??
+    _currentUser =
+        user ??
         UserModel(
           uid: fbUser.uid,
           email: fbUser.email ?? '',

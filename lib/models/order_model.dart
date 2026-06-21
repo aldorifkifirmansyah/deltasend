@@ -16,6 +16,7 @@ class OrderModel {
   final String customerId;
   final String? driverId;
   final String? weightCategoryId;
+  final String weightCategoryName;
 
   final LatLng pickupLocation;
   final LatLng destinationLocation;
@@ -33,6 +34,7 @@ class OrderModel {
   OrderStatus status;
 
   final int? rating;
+  final String ratingNote;
 
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -47,12 +49,14 @@ class OrderModel {
     this.customerId = '',
     this.driverId,
     this.weightCategoryId,
+    this.weightCategoryName = '',
     this.driverLocation,
     this.itemDescription = '',
     this.distanceKm = 0.0,
     this.totalCost = 0.0,
     this.proofPhotoUrl = '',
     this.rating,
+    this.ratingNote = '',
     this.createdAt,
     this.updatedAt,
   });
@@ -69,6 +73,7 @@ class OrderModel {
       customerId: data['customer_id'] as String? ?? '',
       driverId: data['driver_id'] as String?,
       weightCategoryId: data['weight_category_id'] as String?,
+      weightCategoryName: data['weight_category_name'] as String? ?? '',
 
       pickupLocation: LatLng(
         (data['pickup_lat'] as num?)?.toDouble() ?? 0.0,
@@ -99,6 +104,7 @@ class OrderModel {
       ),
 
       rating: data['rating'] as int?,
+      ratingNote: data['rating_note'] as String? ?? '',
 
       createdAt: (data['created_at'] as Timestamp?)?.toDate(),
       updatedAt: (data['updated_at'] as Timestamp?)?.toDate(),

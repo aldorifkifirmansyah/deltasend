@@ -25,6 +25,14 @@ class OrderService {
     return OrderModel.fromFirestore(doc);
   }
 
+  Future<Map<String, dynamic>?> fetchDriverProfile(String driverId) async {
+    final document = await _db.collection('users').doc(driverId).get();
+
+    if (!document.exists) return null;
+
+    return document.data();
+  }
+
   // 3. method buat update lokasi driver dan status order
   Future<void> updateDriverLocation({
     required String orderId,
@@ -185,14 +193,50 @@ class OrderService {
         });
   }
 
+  Stream<List<OrderModel>> watchCustomerOrders(String customerId) {
+    return _db
+        .collection('orders')
+        .where('customer_id', isEqualTo: customerId)
+        .snapshots()
+        .map((snapshot) {
+          final orders = snapshot.docs.map(OrderModel.fromFirestore).toList();
+
+          orders.sort((a, b) {
+            final aDate = a.updatedAt ?? a.createdAt ?? DateTime(0);
+            final bDate = b.updatedAt ?? b.createdAt ?? DateTime(0);
+
+            return bDate.compareTo(aDate);
+          });
+
+          return orders;
+        });
+  }
+
+  Stream<List<OrderModel>> watchActiveOrdersForCustomer(String customerId) {
+    return watchCustomerOrders(customerId).map((orders) {
+      const activeStatuses = {
+        OrderStatus.pending,
+        OrderStatus.accepted,
+        OrderStatus.pickingUp,
+        OrderStatus.delivering,
+      };
+
+      return orders
+          .where((order) => activeStatuses.contains(order.status))
+          .toList();
+    });
+  }
+
   // 6c. submit rating: simpan ke order + hitung ulang rata-rata rating driver
   Future<void> submitRating({
     required String orderId,
     required String driverId,
     required int rating,
+    String ratingNote = '',
   }) async {
     await _db.collection('orders').doc(orderId).update({
       'rating': rating,
+      'rating_note': ratingNote.trim(),
       'updated_at': FieldValue.serverTimestamp(),
     });
 
@@ -212,10 +256,10 @@ class OrderService {
 
     if (ratings.isEmpty) return;
 
-    final avg = ratings.reduce((a, b) => a + b) / ratings.length;
+    final averageRating = ratings.reduce((a, b) => a + b) / ratings.length;
 
     await _db.collection('users').doc(driverId).set({
-      'rating_avg': avg,
+      'rating_avg': averageRating,
       'rating_count': ratings.length,
     }, SetOptions(merge: true));
   }
@@ -231,6 +275,7 @@ class OrderService {
     required double destLng,
     required String itemDescription,
     String? weightCategoryId,
+    String weightCategoryName = '',
     double distanceKm = 0.0,
     double totalCost = 0.0,
   }) async {
@@ -239,6 +284,7 @@ class OrderService {
       // driver_id null = belum ada driver yang ambil (aman dgn OrderModel)
       'driver_id': null,
       'weight_category_id': weightCategoryId,
+      'weight_category_name': weightCategoryName,
       'pickup_address': pickupAddress,
       'pickup_lat': pickupLat,
       'pickup_lng': pickupLng,
