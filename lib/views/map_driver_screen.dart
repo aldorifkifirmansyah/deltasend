@@ -7,6 +7,7 @@ import '../viewmodels/map_viewmodel.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
+import 'chat/chat_screen.dart';
 
 class MapDriverScreen extends StatefulWidget {
   final String orderId;
@@ -147,6 +148,25 @@ class _MapDriverScreenState extends State<MapDriverScreen>
         title: const Text('Mode Driver'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        actions: [
+          if (currentOrder != null &&
+              currentOrder.driverId != null &&
+              currentOrder.driverId!.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Chat Customer',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ChatScreen(
+                    orderId: currentOrder.orderId,
+                    currentUserId: currentOrder.driverId!,
+                    customerId: currentOrder.customerId,
+                    driverId: currentOrder.driverId!,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Stack(
         children: [

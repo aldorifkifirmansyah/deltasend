@@ -1,0 +1,52 @@
+rules_version = '2';
+
+// Referensi Firestore Security Rules untuk DeltaSend.
+// Salin/merge ke Firebase Console (Firestore > Rules).
+// Bagian penting milestone 8 adalah blok `chats` di bawah.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // users: user boleh baca profil, hanya boleh tulis dokumennya sendiri
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // orders: pengguna terautentikasi boleh baca/tulis (sesuai flow saat ini)
+    match /orders/{orderId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // konfigurasi harga & kategori berat: read-only untuk pengguna
+    match /pricing_config/{docId} {
+      allow read: if isSignedIn();
+    }
+    match /weight_categories/{docId} {
+      allow read: if isSignedIn();
+    }
+
+    // chats: hanya customer_id ATAU driver_id pada dokumen chat yang boleh akses
+    match /chats/{orderId} {
+      allow read, update, delete: if isSignedIn() &&
+        (request.auth.uid == resource.data.customer_id ||
+         request.auth.uid == resource.data.driver_id);
+
+      allow create: if isSignedIn() &&
+        (request.auth.uid == request.resource.data.customer_id ||
+         request.auth.uid == request.resource.data.driver_id);
+
+      // messages: cek partisipan dari dokumen chat induk
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn() &&
+          (request.auth.uid ==
+             get(/databases/$(database)/documents/chats/$(orderId)).data.customer_id ||
+           request.auth.uid ==
+             get(/databases/$(database)/documents/chats/$(orderId)).data.driver_id);
+      }
+    }
+  }
+}

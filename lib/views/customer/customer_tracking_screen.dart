@@ -5,6 +5,7 @@ import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../services/routing_service.dart';
 import 'package:flutter/cupertino.dart';
+import '../chat/chat_screen.dart';
 
 class CustomerTrackingScreen extends StatefulWidget {
   final String orderId;
@@ -24,6 +25,30 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
   List<LatLng> _routePoints = [];
   LatLng? _lastRouteCalcPos;
   bool _isCalculatingRoute = false;
+
+  // participant chat di-cache supaya tombol chat di AppBar bisa aktif
+  String? _chatCustomerId;
+  String? _chatDriverId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChatParticipants();
+  }
+
+  Future<void> _loadChatParticipants() async {
+    try {
+      final order = await _orderService.fetchOrderById(widget.orderId);
+      if (!mounted || order == null) return;
+      if (order.driverId == null || order.driverId!.isEmpty) return;
+      setState(() {
+        _chatCustomerId = order.customerId;
+        _chatDriverId = order.driverId;
+      });
+    } catch (_) {
+      // gagal load participant → tombol chat tetap tersembunyi
+    }
+  }
 
   void _maybeUpdateRoute(LatLng driverPos, LatLng destPos) {
     if (_isCalculatingRoute) return;
@@ -61,6 +86,23 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
         title: const Text('Lacak Driver'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        actions: [
+          if (_chatCustomerId != null && _chatDriverId != null)
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Chat Driver',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ChatScreen(
+                    orderId: widget.orderId,
+                    currentUserId: _chatCustomerId!,
+                    customerId: _chatCustomerId!,
+                    driverId: _chatDriverId!,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: StreamBuilder<OrderModel?>(
         stream: _orderService.watchOrder(widget.orderId),
