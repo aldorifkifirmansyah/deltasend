@@ -295,6 +295,8 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
   }
 
   Future<void> _useCurrentLocation() async {
+    if (_isLoadingAddress) return;
+
     try {
       final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
@@ -309,9 +311,16 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
         permission = await Geolocator.requestPermission();
       }
 
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied) {
         _showSnack('Izin lokasi tidak diberikan.');
+        return;
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showSnack(
+          'Izin lokasi diblokir permanen. '
+          'Aktifkan melalui pengaturan aplikasi.',
+        );
         return;
       }
 
@@ -319,44 +328,81 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
         _isLoadingAddress = true;
       });
 
-      final Position position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
+      // Mengikuti kode lama yang sebelumnya berfungsi.
+      final Position position = await Geolocator.getCurrentPosition();
 
       if (!mounted) return;
 
       final LatLng point = LatLng(position.latitude, position.longitude);
 
+      // Simpan koordinat terlebih dahulu.
+      // Jangan menunggu reverse geocoding.
+      setState(() {
+        _selectedPoint = point;
+        _searchResults = [];
+        _searchError = null;
+        _searchController.clear();
+
+        if (_selectedType == _LocationType.pickup) {
+          _pickupAddress = 'Lokasi saat ini';
+          _pickupLat = point.latitude;
+          _pickupLng = point.longitude;
+        } else {
+          _destinationAddress = 'Lokasi saat ini';
+          _destinationLat = point.latitude;
+          _destinationLng = point.longitude;
+        }
+      });
+
       try {
         _mapController.move(point, 16);
       } catch (_) {}
 
-      final String? address = await GeocodingService.reverseGeocode(
-        point.latitude,
-        point.longitude,
-      );
-
-      if (!mounted) return;
-
-      _syncSelection(
-        address: address?.trim().isNotEmpty == true
-            ? address!.trim()
-            : 'Lokasi saat ini',
-        latitude: point.latitude,
-        longitude: point.longitude,
-      );
-
-      _searchController.clear();
-      _searchResults = [];
       _searchFocusNode.unfocus();
+
+      // Tutup loading segera setelah koordinat ditemukan.
+      if (mounted) {
+        setState(() {
+          _isLoadingAddress = false;
+        });
+      }
+
+      // Nama alamat dicari setelah koordinat tersimpan.
+      // Kegagalan geocoding tidak membatalkan pilihan lokasi.
+      try {
+        final String? address = await GeocodingService.reverseGeocode(
+          point.latitude,
+          point.longitude,
+        ).timeout(const Duration(seconds: 8));
+
+        if (!mounted) return;
+
+        final String resolvedAddress = address?.trim().isNotEmpty == true
+            ? address!.trim()
+            : 'Lokasi saat ini';
+
+        _syncSelection(
+          address: resolvedAddress,
+          latitude: point.latitude,
+          longitude: point.longitude,
+        );
+      } catch (_) {
+        // Koordinat sudah tersimpan.
+        // Tidak perlu mengaktifkan loading kembali.
+        if (!mounted) return;
+
+        _syncSelection(
+          address: 'Lokasi saat ini',
+          latitude: point.latitude,
+          longitude: point.longitude,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
 
-      _showSnack('Gagal mendapatkan lokasi saat ini.');
+      _showSnack('Gagal mendapatkan lokasi saat ini: $error');
     } finally {
-      if (mounted) {
+      if (mounted && _isLoadingAddress) {
         setState(() {
           _isLoadingAddress = false;
         });

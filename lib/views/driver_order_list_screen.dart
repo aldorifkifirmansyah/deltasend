@@ -1,7 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../utils/distance_helper.dart';
@@ -11,7 +14,14 @@ import 'map_driver_screen.dart';
 enum _LocationState { loading, ready, denied, deniedForever, serviceOff, error }
 
 class DriverOrderListScreen extends StatefulWidget {
-  const DriverOrderListScreen({super.key});
+  final bool embedded;
+  final bool compact;
+
+  const DriverOrderListScreen({
+    super.key,
+    this.embedded = false,
+    this.compact = false,
+  });
 
   @override
   State<DriverOrderListScreen> createState() => _DriverOrderListScreenState();
@@ -19,70 +29,122 @@ class DriverOrderListScreen extends StatefulWidget {
 
 class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
   final OrderService _orderService = OrderService();
+  final Map<String, Future<Map<String, dynamic>?>> _customerProfileCache = {};
 
-  // orderId yang sedang diproses, biar tombolnya bisa di-disable & loading
+  Future<Map<String, dynamic>?> _fetchCustomerProfile(String customerId) {
+    if (customerId.trim().isEmpty) {
+      return Future.value(null);
+    }
+
+    return _customerProfileCache.putIfAbsent(customerId, () async {
+      try {
+        final document = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(customerId)
+            .get();
+
+        return document.data();
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  String _formatOrderId(String orderId) {
+    final String cleanId = orderId
+        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+        .toUpperCase();
+
+    final String shortId = cleanId.length > 8
+        ? cleanId.substring(0, 8)
+        : cleanId;
+
+    return '#ORD-$shortId';
+  }
+
   String? _processingOrderId;
-
   late final String _driverId;
 
   Position? _driverPosition;
   _LocationState _locationState = _LocationState.loading;
 
+  static const Color _primaryBlue = Color(0xFF133D87);
+  static const Color _titleBlue = Color(0xFF608BC0);
+  static const Color _textDark = Color(0xFF1A1D23);
+  static const Color _textGrey = Color(0xFF6F7784);
+  static const Color _borderBlue = Color(0xFFC5D8EE);
+  static const Color _successGreen = Color(0xFF0AAA55);
+  static const Color _warningOrange = Color(0xFFE08B00);
+
   @override
   void initState() {
     super.initState();
+
     _driverId = context.read<AuthViewModel>().currentUser?.uid ?? '';
+
     _initDriverLocation();
   }
 
-  // Ambil posisi driver sekali (pola sama dgn MapViewModel.initLocation).
-  // Dipakai untuk ranking jarak order; dipanggil ulang lewat pull-to-refresh.
   Future<void> _initDriverLocation() async {
-    if (mounted) setState(() => _locationState = _LocationState.loading);
+    if (mounted) {
+      setState(() {
+        _locationState = _LocationState.loading;
+      });
+    }
 
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
       if (!serviceEnabled) {
-        if (mounted) {
-          setState(() {
-            _driverPosition = null;
-            _locationState = _LocationState.serviceOff;
-          });
-        }
+        if (!mounted) return;
+
+        setState(() {
+          _driverPosition = null;
+          _locationState = _LocationState.serviceOff;
+        });
+
         return;
       }
 
-      var permission = await Geolocator.checkPermission();
+      LocationPermission permission = await Geolocator.checkPermission();
+
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
+
       if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          setState(() {
-            _driverPosition = null;
-            _locationState = _LocationState.deniedForever;
-          });
-        }
-        return;
-      }
-      if (permission == LocationPermission.denied) {
-        if (mounted) {
-          setState(() {
-            _driverPosition = null;
-            _locationState = _LocationState.denied;
-          });
-        }
+        if (!mounted) return;
+
+        setState(() {
+          _driverPosition = null;
+          _locationState = _LocationState.deniedForever;
+        });
+
         return;
       }
 
-      final position = await Geolocator.getCurrentPosition();
+      if (permission == LocationPermission.denied) {
+        if (!mounted) return;
+
+        setState(() {
+          _driverPosition = null;
+          _locationState = _LocationState.denied;
+        });
+
+        return;
+      }
+
+      final Position position = await Geolocator.getCurrentPosition();
+
       if (!mounted) return;
+
       setState(() {
         _driverPosition = position;
         _locationState = _LocationState.ready;
       });
     } catch (_) {
       if (!mounted) return;
+
       setState(() {
         _driverPosition = null;
         _locationState = _LocationState.error;
@@ -91,17 +153,17 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
   }
 
   void _openMap(String orderId) {
-    // push (bukan pushReplacement) supaya back dari peta kembali ke daftar ini,
-    // sehingga driver tetap bisa melihat & melanjutkan order aktifnya.
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => MapDriverScreen(orderId: orderId)),
     );
   }
 
-  Future<void> _ambilOrder(OrderModel order) async {
+  Future<void> _takeOrder(OrderModel order) async {
     if (_processingOrderId != null) return;
 
-    setState(() => _processingOrderId = order.orderId);
+    setState(() {
+      _processingOrderId = order.orderId;
+    });
 
     try {
       await _orderService.acceptOrder(
@@ -110,14 +172,26 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
       );
 
       if (!mounted) return;
+
       _openMap(order.orderId);
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Gagal mengambil order: $e')));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Gagal mengambil order: $error',
+            style: GoogleFonts.inter(),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
-      if (mounted) setState(() => _processingOrderId = null);
+      if (mounted) {
+        setState(() {
+          _processingOrderId = null;
+        });
+      }
     }
   }
 
@@ -126,52 +200,103 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
     return StreamBuilder<List<OrderModel>>(
       stream: _orderService.watchActiveOrdersForDriver(_driverId),
       builder: (context, activeSnapshot) {
-        final activeOrders = activeSnapshot.data ?? [];
-        final hasActive = activeOrders.isNotEmpty;
+        final List<OrderModel> activeOrders = activeSnapshot.data ?? [];
+
+        final bool hasActive = activeOrders.isNotEmpty;
+
+        final Widget content = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildSectionHeader(
+              title: 'Order Aktif Saya',
+              icon: Icons.local_shipping_outlined,
+            ),
+
+            const SizedBox(height: 10),
+
+            if (activeOrders.length > 1)
+              _buildInformationBanner(
+                'Terdeteksi ${activeOrders.length} order aktif. '
+                'Selesaikan order lama terlebih dahulu.',
+              ),
+
+            _buildActiveContent(activeSnapshot),
+
+            if (!widget.compact) ...[
+              const SizedBox(height: 26),
+
+              _buildSectionHeader(
+                title: 'Order Tersedia',
+                icon: Icons.inventory_2_outlined,
+              ),
+
+              const SizedBox(height: 10),
+
+              _buildPendingOrdersSection(hasActive: hasActive),
+            ],
+          ],
+        );
+
+        if (widget.embedded) {
+          return RefreshIndicator(
+            onRefresh: _initDriverLocation,
+            color: _primaryBlue,
+            child: ListView(
+              shrinkWrap: true,
+              primary: false,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              children: [content],
+            ),
+          );
+        }
 
         return RefreshIndicator(
           onRefresh: _initDriverLocation,
+          color: _primaryBlue,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(12),
-            children: [
-              _buildSectionTitle('Order Aktif Saya'),
-            if (activeOrders.length > 1)
-              _buildInfoText(
-                'Terdeteksi ${activeOrders.length} order aktif (data testing lama). '
-                'Selesaikan order-order ini; ke depan driver hanya boleh 1 order aktif.',
-              ),
-            _buildActiveContent(activeSnapshot),
-            const SizedBox(height: 20),
-            _buildSectionTitle('Order Tersedia'),
-            _buildPendingOrdersSection(hasActive: hasActive),
-            ],
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 110),
+            children: [content],
           ),
         );
       },
     );
   }
 
-  // ===== Bagian 1: Order aktif milik driver =====
   Widget _buildActiveContent(AsyncSnapshot<List<OrderModel>> snapshot) {
-    if (snapshot.connectionState == ConnectionState.waiting) {
+    if (snapshot.connectionState == ConnectionState.waiting &&
+        !snapshot.hasData) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator(color: _primaryBlue)),
       );
     }
 
     if (snapshot.hasError) {
-      return _buildInfoText('Gagal memuat order aktif: ${snapshot.error}');
+      return _buildEmptyState(
+        icon: Icons.error_outline_rounded,
+        title: 'Gagal memuat order aktif',
+        description: '${snapshot.error}',
+      );
     }
 
-    final orders = snapshot.data ?? [];
+    final List<OrderModel> orders = snapshot.data ?? [];
+
     if (orders.isEmpty) {
-      return _buildInfoText('Tidak ada order aktif');
+      return _buildEmptyState(
+        icon: Icons.delivery_dining_outlined,
+        title: 'Tidak ada order aktif',
+        description: 'Order yang kamu ambil akan tampil di bagian ini.',
+      );
     }
+
+    final Iterable<OrderModel> displayedOrders = widget.compact
+        ? orders.take(1)
+        : orders;
 
     return Column(
-      children: orders
+      children: displayedOrders
           .map(
             (order) => _buildOrderCard(
               order: order,
@@ -185,58 +310,69 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
     );
   }
 
-  // ===== Bagian 2: Order pending yang bisa diambil =====
   Widget _buildPendingOrdersSection({required bool hasActive}) {
     return StreamBuilder<List<OrderModel>>(
       stream: _orderService.watchPendingOrders(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Center(child: CircularProgressIndicator()),
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: CircularProgressIndicator(color: _primaryBlue),
+            ),
           );
         }
 
         if (snapshot.hasError) {
-          return _buildInfoText('Terjadi kesalahan: ${snapshot.error}');
+          return _buildEmptyState(
+            icon: Icons.error_outline_rounded,
+            title: 'Gagal memuat order',
+            description: '${snapshot.error}',
+          );
         }
 
-        final orders = snapshot.data ?? [];
+        final List<OrderModel> orders = snapshot.data ?? [];
+
         if (orders.isEmpty) {
-          return _buildInfoText('Belum ada order pending');
+          return _buildEmptyState(
+            icon: Icons.inventory_2_outlined,
+            title: 'Belum ada order tersedia',
+            description: 'Order baru akan muncul secara otomatis.',
+          );
         }
 
-        // tombol ambil di-disable jika: driver sudah punya order aktif,
-        // atau salah satu order sedang diproses.
-        final isLocked = hasActive || _processingOrderId != null;
+        final bool isLocked = hasActive || _processingOrderId != null;
 
-        String buttonText() =>
-            hasActive ? 'Selesaikan order aktif dulu' : 'Ambil Order';
+        final String buttonText = hasActive
+            ? 'Selesaikan Order Aktif'
+            : 'Ambil Order';
 
-        // Lokasi driver tersedia → ranking + filter radius (Haversine).
         if (_driverPosition != null) {
-          final ranked = _orderService.sortAndFilterByDistance(
+          final rankedOrders = _orderService.sortAndFilterByDistance(
             orders: orders,
             driverPosition: _driverPosition!,
           );
 
-          if (ranked.isEmpty) {
-            return _buildInfoText(
-              'Tidak ada order dalam radius ${kMaxOrderRadiusKm.toStringAsFixed(0)} km dari lokasimu',
+          if (rankedOrders.isEmpty) {
+            return _buildEmptyState(
+              icon: Icons.location_off_outlined,
+              title: 'Tidak ada order terdekat',
+              description:
+                  'Tidak ada order dalam radius '
+                  '${kMaxOrderRadiusKm.toStringAsFixed(0)} km.',
             );
           }
 
           return Column(
-            children: ranked
+            children: rankedOrders
                 .map(
                   (item) => _buildOrderCard(
                     order: item.order,
                     showStatus: false,
-                    buttonText: buttonText(),
+                    buttonText: buttonText,
                     isProcessing: _processingOrderId == item.order.orderId,
-                    onPressed: isLocked
-                        ? null
-                        : () => _ambilOrder(item.order),
+                    onPressed: isLocked ? null : () => _takeOrder(item.order),
                     driverDistanceKm: item.distanceKm,
                   ),
                 )
@@ -244,17 +380,18 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
           );
         }
 
-        // Lokasi tidak tersedia → tampilkan semua order tanpa filter + banner.
         return Column(
           children: [
-            if (_locationState != _LocationState.loading) _buildLocationBanner(),
+            if (_locationState != _LocationState.loading)
+              _buildLocationBanner(),
+
             ...orders.map(
               (order) => _buildOrderCard(
                 order: order,
                 showStatus: false,
-                buttonText: buttonText(),
+                buttonText: buttonText,
                 isProcessing: _processingOrderId == order.orderId,
-                onPressed: isLocked ? null : () => _ambilOrder(order),
+                onPressed: isLocked ? null : () => _takeOrder(order),
               ),
             ),
           ],
@@ -263,109 +400,28 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
     );
   }
 
-  Widget _buildLocationBanner() {
-    String message;
-    String actionLabel;
-    VoidCallback onAction;
-
-    switch (_locationState) {
-      case _LocationState.deniedForever:
-        message =
-            'Izin lokasi diblokir permanen. Buka Settings untuk mengaktifkan, '
-            'lalu refresh halaman ini.';
-        actionLabel = 'Buka Settings';
-        onAction = () => Geolocator.openAppSettings();
-        break;
-      case _LocationState.serviceOff:
-        message = 'GPS tidak aktif. Menampilkan semua order tersedia.';
-        actionLabel = 'Buka Pengaturan';
-        onAction = () => Geolocator.openLocationSettings();
-        break;
-      case _LocationState.denied:
-        message = 'Izin lokasi ditolak. Menampilkan semua order tersedia.';
-        actionLabel = 'Coba Lagi';
-        onAction = _initDriverLocation;
-        break;
-      default:
-        message = 'Lokasi tidak aktif, menampilkan semua order tersedia.';
-        actionLabel = 'Coba Lagi';
-        onAction = _initDriverLocation;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF6E0),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFF0C95C)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.warning_amber_rounded,
-              color: Color(0xFFB8860B), size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: const TextStyle(fontSize: 12.5, color: Color(0xFF8A6D00)),
-            ),
+  Widget _buildSectionHeader({required String title, required IconData icon}) {
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: _titleBlue.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(9),
           ),
-          TextButton(
-            onPressed: onAction,
-            child: Text(actionLabel),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDistanceBadge(double distanceKm) {
-    final color = Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.near_me, size: 13, color: color),
-          const SizedBox(width: 4),
-          Text(
-            '${distanceKm.toStringAsFixed(1)} km dari kamu',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6, top: 2),
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-
-  Widget _buildInfoText(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Center(
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.grey),
+          child: Icon(icon, color: _primaryBlue, size: 20),
         ),
-      ),
+        const SizedBox(width: 10),
+        Text(
+          title,
+          style: GoogleFonts.inter(
+            color: _textDark,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 
@@ -377,158 +433,464 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
     required VoidCallback? onPressed,
     double? driverDistanceKm,
   }) {
-    return Card(
-      elevation: 3,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    order.itemDescription.isNotEmpty
-                        ? order.itemDescription
-                        : 'Paket',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 13),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: _borderBlue),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.07),
+            blurRadius: 9,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: _titleBlue.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                if (showStatus)
-                  _buildStatusChip(order.status)
-                else if (driverDistanceKm != null)
-                  _buildDistanceBadge(driverDistanceKm),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildLocationRow(
-              CupertinoIcons.location_north_fill,
-              Colors.green,
-              'Jemput',
-              order.pickupAddress,
-            ),
-            const SizedBox(height: 8),
-            _buildLocationRow(
-              CupertinoIcons.location_solid,
-              Colors.red,
-              'Tujuan',
-              order.destinationAddress,
-            ),
-            const Divider(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  order.distanceKm > 0
-                      ? '${order.distanceKm.toStringAsFixed(1)} km'
-                      : 'Jarak -',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
-                  ),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: _primaryBlue,
+                  size: 25,
                 ),
-                Text(
-                  order.totalCost > 0
-                      ? 'Rp ${order.totalCost.toStringAsFixed(0)}'
-                      : 'Rp -',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Theme.of(context).colorScheme.secondary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                  foregroundColor: Theme.of(context).colorScheme.onSecondary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: onPressed,
-                child: isProcessing
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        buttonText,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FutureBuilder<Map<String, dynamic>?>(
+                  future: _fetchCustomerProfile(order.customerId),
+                  builder: (context, snapshot) {
+                    final Map<String, dynamic>? customerData = snapshot.data;
+
+                    final String customerName =
+                        customerData?['name'] as String? ?? 'Customer';
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _formatOrderId(order.orderId),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            color: _textDark,
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.person_outline_rounded,
+                              color: _textGrey,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                customerName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  color: _textGrey,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (showStatus)
+                _buildStatusChip(order.status)
+              else if (driverDistanceKm != null)
+                _buildDistanceBadge(driverDistanceKm),
+            ],
+          ),
+
+          const Divider(height: 25, color: Color(0xFFE4E9F0)),
+
+          _buildLocationRow(
+            icon: CupertinoIcons.location_north_fill,
+            color: _successGreen,
+            label: 'Pickup',
+            value: order.pickupAddress,
+          ),
+
+          const SizedBox(height: 12),
+
+          _buildLocationRow(
+            icon: CupertinoIcons.location_solid,
+            color: const Color(0xFFD14343),
+            label: 'Destination',
+            value: order.destinationAddress,
+          ),
+
+          const Divider(height: 25, color: Color(0xFFE4E9F0)),
+
+          Row(
+            children: [
+              const Icon(Icons.route_rounded, color: _titleBlue, size: 19),
+              const SizedBox(width: 6),
+              Text(
+                order.distanceKm > 0
+                    ? '${order.distanceKm.toStringAsFixed(1)} km'
+                    : 'Jarak -',
+                style: GoogleFonts.inter(
+                  color: _textGrey,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                order.totalCost > 0 ? _formatCurrency(order.totalCost) : 'Rp -',
+                style: GoogleFonts.inter(
+                  color: _primaryBlue,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          SizedBox(
+            width: double.infinity,
+            height: 47,
+            child: ElevatedButton(
+              onPressed: onPressed,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryBlue,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: _primaryBlue.withValues(alpha: 0.38),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11),
+                ),
+              ),
+              child: isProcessing
+                  ? const SizedBox(
+                      width: 21,
+                      height: 21,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(
+                      buttonText,
+                      style: GoogleFonts.inter(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildStatusChip(OrderStatus status) {
-    final label = status == OrderStatus.pickingUp
-        ? 'Menjemput'
-        : status == OrderStatus.delivering
-        ? 'Mengantar'
-        : status.name;
+    final String label;
+    final Color color;
+    final Color background;
+
+    switch (status) {
+      case OrderStatus.accepted:
+        label = 'Accepted';
+        color = const Color(0xFF0066FF);
+        background = const Color(0xFFE7F0FF);
+        break;
+
+      case OrderStatus.pickingUp:
+        label = 'Picking Up';
+        color = _warningOrange;
+        background = const Color(0xFFFFF3D8);
+        break;
+
+      case OrderStatus.delivering:
+        label = 'Delivering';
+        color = const Color(0xFF0066FF);
+        background = const Color(0xFFE7F0FF);
+        break;
+
+      case OrderStatus.completed:
+        label = 'Completed';
+        color = _successGreen;
+        background = const Color(0xFFE1F8EB);
+        break;
+
+      case OrderStatus.cancelled:
+        label = 'Cancelled';
+        color = const Color(0xFFD14343);
+        background = const Color(0xFFFFE8E8);
+        break;
+
+      case OrderStatus.pending:
+        label = 'Pending';
+        color = _warningOrange;
+        background = const Color(0xFFFFF3D8);
+        break;
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
+        color: background,
+        borderRadius: BorderRadius.circular(13),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: Theme.of(context).colorScheme.primary,
+        style: GoogleFonts.inter(
+          color: color,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
   }
 
-  Widget _buildLocationRow(
-    IconData icon,
-    Color color,
-    String label,
-    String value,
-  ) {
+  Widget _buildDistanceBadge(double distanceKm) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: _titleBlue.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.near_me_rounded, color: _primaryBlue, size: 13),
+          const SizedBox(width: 4),
+          Text(
+            '${distanceKm.toStringAsFixed(1)} km',
+            style: GoogleFonts.inter(
+              color: _primaryBlue,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationRow({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: color, size: 20),
-        const SizedBox(width: 8),
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, color: color, size: 19),
+        ),
+        const SizedBox(width: 11),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                style: GoogleFonts.inter(
+                  color: color,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              Text(value, style: const TextStyle(fontSize: 14)),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  color: _textGrey,
+                  fontSize: 12.5,
+                  height: 1.35,
+                ),
+              ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildLocationBanner() {
+    String message;
+    String actionLabel;
+    VoidCallback action;
+
+    switch (_locationState) {
+      case _LocationState.deniedForever:
+        message = 'Izin lokasi diblokir permanen.';
+        actionLabel = 'Settings';
+        action = Geolocator.openAppSettings;
+        break;
+
+      case _LocationState.serviceOff:
+        message = 'GPS tidak aktif. Semua order ditampilkan.';
+        actionLabel = 'Aktifkan';
+        action = Geolocator.openLocationSettings;
+        break;
+
+      case _LocationState.denied:
+        message = 'Izin lokasi ditolak.';
+        actionLabel = 'Coba Lagi';
+        action = _initDriverLocation;
+        break;
+
+      default:
+        message = 'Lokasi tidak dapat diperoleh.';
+        actionLabel = 'Coba Lagi';
+        action = _initDriverLocation;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 13),
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6E0),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: const Color(0xFFF0C95C)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFB8860B),
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF8A6D00),
+                fontSize: 11.5,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: action,
+            child: Text(
+              actionLabel,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInformationBanner(String message) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF6E0),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: Text(
+        message,
+        style: GoogleFonts.inter(
+          color: const Color(0xFF8A6D00),
+          fontSize: 12,
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFD),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFDCE5F1)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: _titleBlue, size: 38),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: _textDark,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: _textGrey,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatCurrency(double value) {
+    final String raw = value.toStringAsFixed(0);
+    final StringBuffer result = StringBuffer();
+
+    for (int index = 0; index < raw.length; index++) {
+      final int remaining = raw.length - index;
+
+      result.write(raw[index]);
+
+      if (remaining > 1 && remaining % 3 == 1) {
+        result.write('.');
+      }
+    }
+
+    return 'Rp. $result';
   }
 }

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,24 +8,21 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../utils/app_assets.dart';
+import 'customer_bottom_bar.dart';
 import 'customer_tracking_screen.dart';
 import 'rating_screen.dart';
 
 class CustomerOrderDetailScreen extends StatefulWidget {
   final String orderId;
 
-  const CustomerOrderDetailScreen({
-    super.key,
-    required this.orderId,
-  });
+  const CustomerOrderDetailScreen({super.key, required this.orderId});
 
   @override
   State<CustomerOrderDetailScreen> createState() =>
       _CustomerOrderDetailScreenState();
 }
 
-class _CustomerOrderDetailScreenState
-    extends State<CustomerOrderDetailScreen> {
+class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
   final OrderService _orderService = OrderService();
 
   String? _cachedDriverId;
@@ -35,19 +35,15 @@ class _CustomerOrderDetailScreenState
   static const Color _borderBlue = Color(0xFFC5D8EE);
   static const Color _successGreen = Color(0xFF0AAA55);
 
-  Future<Map<String, dynamic>?>? _getDriverProfile(
-    String? driverId,
-  ) {
+  Future<Map<String, dynamic>?>? _getDriverProfile(String? driverId) {
     if (driverId == null || driverId.trim().isEmpty) {
       return null;
     }
 
-    if (_cachedDriverId != driverId ||
-        _driverProfileFuture == null) {
+    if (_cachedDriverId != driverId || _driverProfileFuture == null) {
       _cachedDriverId = driverId;
 
-      _driverProfileFuture =
-          _orderService.fetchDriverProfile(driverId);
+      _driverProfileFuture = _orderService.fetchDriverProfile(driverId);
     }
 
     return _driverProfileFuture;
@@ -83,14 +79,11 @@ class _CustomerOrderDetailScreenState
       'Des',
     ];
 
-    final String day =
-        date.day.toString().padLeft(2, '0');
+    final String day = date.day.toString().padLeft(2, '0');
 
-    final String hour =
-        date.hour.toString().padLeft(2, '0');
+    final String hour = date.hour.toString().padLeft(2, '0');
 
-    final String minute =
-        date.minute.toString().padLeft(2, '0');
+    final String minute = date.minute.toString().padLeft(2, '0');
 
     return '$day ${monthNames[date.month - 1]} '
         '${date.year}, $hour:$minute';
@@ -159,54 +152,65 @@ class _CustomerOrderDetailScreenState
         status == OrderStatus.delivering;
   }
 
+  bool _hasProofPhoto(OrderModel order) {
+    return order.status == OrderStatus.completed &&
+        order.proofPhotoUrl.trim().isNotEmpty;
+  }
+
   void _openTracking(OrderModel order) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CustomerTrackingScreen(
-          orderId: order.orderId,
-        ),
+        builder: (_) => CustomerTrackingScreen(orderId: order.orderId),
       ),
     );
   }
 
   void _openRating(OrderModel order) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RatingScreen(
-          order: order,
-        ),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => RatingScreen(order: order)));
+  }
+
+  Uint8List? _decodeBase64Image(String source) {
+    try {
+      String cleanedSource = source.trim();
+
+      if (cleanedSource.contains(',')) {
+        cleanedSource = cleanedSource.split(',').last;
+      }
+
+      cleanedSource = cleanedSource.replaceAll(RegExp(r'\s+'), '');
+
+      return base64Decode(cleanedSource);
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F9FC),
+      extendBody: true,
+      bottomNavigationBar: const CustomerBottomBar(selectedIndex: 1),
       body: StreamBuilder<OrderModel?>(
         stream: _orderService.watchOrder(widget.orderId),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return _buildErrorState(
-              'Gagal memuat detail order.',
-            );
+            return _buildErrorState('Gagal memuat detail order.');
           }
 
-          if (snapshot.connectionState ==
-                  ConnectionState.waiting &&
+          if (snapshot.connectionState == ConnectionState.waiting &&
               !snapshot.hasData) {
             return const Center(
-              child: CircularProgressIndicator(
-                color: _primaryBlue,
-              ),
+              child: CircularProgressIndicator(color: _primaryBlue),
             );
           }
 
           final OrderModel? order = snapshot.data;
 
           if (order == null) {
-            return _buildErrorState(
-              'Order tidak ditemukan.',
-            );
+            return _buildErrorState('Order tidak ditemukan.');
           }
 
           return Stack(
@@ -216,9 +220,7 @@ class _CustomerOrderDetailScreenState
                 AppAssets.loginBackground,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) {
-                  return const ColoredBox(
-                    color: Color(0xFFF7F9FC),
-                  );
+                  return const ColoredBox(color: Color(0xFFF7F9FC));
                 },
               ),
               SafeArea(
@@ -226,28 +228,21 @@ class _CustomerOrderDetailScreenState
                 child: Column(
                   children: [
                     const SizedBox(height: 16),
-                    SvgPicture.asset(
-                      AppAssets.logo,
-                      width: 214,
-                    ),
+                    SvgPicture.asset(AppAssets.logo, width: 214),
                     const SizedBox(height: 26),
                     Expanded(
                       child: Container(
                         width: double.infinity,
-                        margin: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                        ),
+                        margin: const EdgeInsets.fromLTRB(22, 0, 22, 90),
+                        clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius:
-                              const BorderRadius.vertical(
+                          borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(28),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: 0.12,
-                              ),
+                              color: Colors.black.withValues(alpha: 0.12),
                               blurRadius: 18,
                               offset: const Offset(0, 5),
                             ),
@@ -267,23 +262,16 @@ class _CustomerOrderDetailScreenState
   }
 
   Widget _buildContent(OrderModel order) {
-    final String itemName =
-        order.itemDescription.trim().isNotEmpty
-            ? order.itemDescription.trim()
-            : 'Paket';
+    final String itemName = order.itemDescription.trim().isNotEmpty
+        ? order.itemDescription.trim()
+        : 'Paket';
 
-    final String weightName =
-        order.weightCategoryName.trim().isNotEmpty
-            ? order.weightCategoryName.trim()
-            : order.weightCategoryId ?? '-';
+    final String weightName = order.weightCategoryName.trim().isNotEmpty
+        ? order.weightCategoryName.trim()
+        : order.weightCategoryId ?? '-';
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        18,
-        20,
-        34,
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 45),
       children: [
         _buildHeader(),
         const SizedBox(height: 20),
@@ -298,6 +286,12 @@ class _CustomerOrderDetailScreenState
           itemName: itemName,
           weightName: weightName,
         ),
+
+        if (_hasProofPhoto(order)) ...[
+          const SizedBox(height: 18),
+          _buildProofPhotoCard(order.proofPhotoUrl),
+        ],
+
         const SizedBox(height: 18),
         _buildPaymentCard(order),
         const SizedBox(height: 25),
@@ -336,8 +330,7 @@ class _CustomerOrderDetailScreenState
   }
 
   Widget _buildStatusCard(OrderModel order) {
-    final Color statusColor =
-        _statusColor(order.status);
+    final Color statusColor = _statusColor(order.status);
 
     return Container(
       width: double.infinity,
@@ -345,9 +338,7 @@ class _CustomerOrderDetailScreenState
       decoration: BoxDecoration(
         color: statusColor.withValues(alpha: 0.09),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: statusColor.withValues(alpha: 0.30),
-        ),
+        border: Border.all(color: statusColor.withValues(alpha: 0.30)),
       ),
       child: Row(
         children: [
@@ -362,8 +353,8 @@ class _CustomerOrderDetailScreenState
               order.status == OrderStatus.completed
                   ? Icons.check_circle_outline_rounded
                   : order.status == OrderStatus.cancelled
-                      ? Icons.cancel_outlined
-                      : Icons.local_shipping_outlined,
+                  ? Icons.cancel_outlined
+                  : Icons.local_shipping_outlined,
               color: statusColor,
               size: 27,
             ),
@@ -371,8 +362,7 @@ class _CustomerOrderDetailScreenState
           const SizedBox(width: 13),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   _statusLabel(order.status),
@@ -384,21 +374,14 @@ class _CustomerOrderDetailScreenState
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  _formatDisplayOrderId(
-                    order.orderId,
-                  ),
-                  style: GoogleFonts.inter(
-                    color: _textGrey,
-                    fontSize: 12,
-                  ),
+                  _formatDisplayOrderId(order.orderId),
+                  style: GoogleFonts.inter(color: _textGrey, fontSize: 12),
                 ),
               ],
             ),
           ),
           Text(
-            _formatDate(
-              order.updatedAt ?? order.createdAt,
-            ),
+            _formatDate(order.updatedAt ?? order.createdAt),
             textAlign: TextAlign.right,
             style: GoogleFonts.inter(
               color: _textGrey,
@@ -412,8 +395,9 @@ class _CustomerOrderDetailScreenState
   }
 
   Widget _buildDriverCard(OrderModel order) {
-    final Future<Map<String, dynamic>?>? driverFuture =
-        _getDriverProfile(order.driverId);
+    final Future<Map<String, dynamic>?>? driverFuture = _getDriverProfile(
+      order.driverId,
+    );
 
     return _DetailSection(
       title: 'Driver',
@@ -427,22 +411,13 @@ class _CustomerOrderDetailScreenState
           : FutureBuilder<Map<String, dynamic>?>(
               future: driverFuture,
               builder: (context, snapshot) {
-                final Map<String, dynamic>? data =
-                    snapshot.data;
+                final Map<String, dynamic>? data = snapshot.data;
 
                 return _buildDriverInformation(
-                  name:
-                      data?['name'] as String? ?? 'Driver',
-                  photoUrl:
-                      data?['photo_url'] as String? ?? '',
-                  rating:
-                      (data?['rating_avg'] as num?)
-                              ?.toDouble() ??
-                          0,
-                  ratingCount:
-                      (data?['rating_count'] as num?)
-                              ?.toInt() ??
-                          0,
+                  name: data?['name'] as String? ?? 'Driver',
+                  photoUrl: data?['photo_url'] as String? ?? '',
+                  rating: (data?['rating_avg'] as num?)?.toDouble() ?? 0,
+                  ratingCount: (data?['rating_count'] as num?)?.toInt() ?? 0,
                 );
               },
             ),
@@ -466,11 +441,7 @@ class _CustomerOrderDetailScreenState
             shape: BoxShape.circle,
           ),
           child: photoUrl.trim().isEmpty
-              ? const Icon(
-                  Icons.person_rounded,
-                  color: _primaryBlue,
-                  size: 31,
-                )
+              ? const Icon(Icons.person_rounded, color: _primaryBlue, size: 31)
               : Image.network(
                   photoUrl,
                   fit: BoxFit.cover,
@@ -486,8 +457,7 @@ class _CustomerOrderDetailScreenState
         const SizedBox(width: 13),
         Expanded(
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 name,
@@ -509,9 +479,7 @@ class _CustomerOrderDetailScreenState
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    rating > 0
-                        ? rating.toStringAsFixed(1)
-                        : '-',
+                    rating > 0 ? rating.toStringAsFixed(1) : '-',
                     style: GoogleFonts.inter(
                       color: _textDark,
                       fontSize: 12.5,
@@ -582,20 +550,120 @@ class _CustomerOrderDetailScreenState
       title: 'Item Information',
       child: Column(
         children: [
-          _DetailRow(
-            label: 'Item',
-            value: itemName,
-          ),
+          _DetailRow(label: 'Item', value: itemName),
           const SizedBox(height: 11),
-          _DetailRow(
-            label: 'Weight',
-            value: weightName,
-          ),
+          _DetailRow(label: 'Weight', value: weightName),
           const SizedBox(height: 11),
           _DetailRow(
             label: 'Distance',
-            value:
-                '${order.distanceKm.toStringAsFixed(2)} km',
+            value: '${order.distanceKm.toStringAsFixed(2)} km',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProofPhotoCard(String proofPhotoUrl) {
+    return _DetailSection(
+      title: 'Proof of Delivery',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: AspectRatio(
+              aspectRatio: 4 / 3,
+              child: _buildProofPhoto(proofPhotoUrl),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(
+                Icons.verified_rounded,
+                color: _successGreen,
+                size: 19,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'Foto ini diambil oleh driver sebagai bukti bahwa paket telah selesai dikirim.',
+                  style: GoogleFonts.inter(
+                    color: _textGrey,
+                    fontSize: 11.5,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProofPhoto(String source) {
+    final String imageSource = source.trim();
+
+    final bool isNetworkImage =
+        imageSource.startsWith('http://') || imageSource.startsWith('https://');
+
+    if (isNetworkImage) {
+      return Image.network(
+        imageSource,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) {
+            return child;
+          }
+
+          return const ColoredBox(
+            color: Color(0xFFF2F5F9),
+            child: Center(
+              child: CircularProgressIndicator(color: _primaryBlue),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) {
+          return _buildPhotoError();
+        },
+      );
+    }
+
+    final Uint8List? imageBytes = _decodeBase64Image(imageSource);
+
+    if (imageBytes == null) {
+      return _buildPhotoError();
+    }
+
+    return Image.memory(
+      imageBytes,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) {
+        return _buildPhotoError();
+      },
+    );
+  }
+
+  Widget _buildPhotoError() {
+    return Container(
+      color: const Color(0xFFF2F5F9),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.broken_image_outlined, color: _titleBlue, size: 45),
+          const SizedBox(height: 9),
+          Text(
+            'Foto bukti tidak dapat ditampilkan',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: _textGrey,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -607,19 +675,13 @@ class _CustomerOrderDetailScreenState
       title: 'Payment Details',
       child: Column(
         children: [
-          const _DetailRow(
-            label: 'Payment Method',
-            value: 'Cash',
-          ),
+          const _DetailRow(label: 'Payment Method', value: 'Cash'),
           const SizedBox(height: 11),
           _DetailRow(
             label: 'Delivery Fee',
             value: _formatCurrency(order.totalCost),
           ),
-          const Divider(
-            height: 25,
-            color: Color(0xFFE3E8EF),
-          ),
+          const Divider(height: 25, color: Color(0xFFE3E8EF)),
           _DetailRow(
             label: 'Total Payment',
             value: _formatCurrency(order.totalCost),
@@ -644,23 +706,16 @@ class _CustomerOrderDetailScreenState
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          icon: const Icon(
-            Icons.location_searching_rounded,
-            size: 20,
-          ),
+          icon: const Icon(Icons.location_searching_rounded, size: 20),
           label: Text(
             'Track Order',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
           ),
         ),
       );
     }
 
-    if (order.status == OrderStatus.completed &&
-        order.rating == null) {
+    if (order.status == OrderStatus.completed && order.rating == null) {
       return SizedBox(
         width: double.infinity,
         height: 51,
@@ -673,44 +728,28 @@ class _CustomerOrderDetailScreenState
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          icon: const Icon(
-            Icons.star_outline_rounded,
-            size: 21,
-          ),
+          icon: const Icon(Icons.star_outline_rounded, size: 21),
           label: Text(
             'Give Rating',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700),
           ),
         ),
       );
     }
 
-    if (order.status == OrderStatus.completed &&
-        order.rating != null) {
+    if (order.status == OrderStatus.completed && order.rating != null) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 15,
-          vertical: 14,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
         decoration: BoxDecoration(
           color: _successGreen.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-            color: _successGreen.withValues(alpha: 0.25),
-          ),
+          border: Border.all(color: _successGreen.withValues(alpha: 0.25)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.star_rounded,
-              color: Color(0xFFFFB800),
-              size: 22,
-            ),
+            const Icon(Icons.star_rounded, color: Color(0xFFFFB800), size: 22),
             const SizedBox(width: 8),
             Text(
               'Your Rating: ${order.rating}/5',
@@ -729,9 +768,8 @@ class _CustomerOrderDetailScreenState
   }
 
   Widget _buildErrorState(String message) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
-      body: Center(
+    return SafeArea(
+      child: Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
@@ -746,10 +784,7 @@ class _CustomerOrderDetailScreenState
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  color: _textGrey,
-                  fontSize: 14,
-                ),
+                style: GoogleFonts.inter(color: _textGrey, fontSize: 14),
               ),
               const SizedBox(height: 20),
               ElevatedButton(
@@ -760,7 +795,10 @@ class _CustomerOrderDetailScreenState
                   backgroundColor: _primaryBlue,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Kembali'),
+                child: Text(
+                  'Kembali',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),
@@ -774,10 +812,7 @@ class _DetailSection extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const _DetailSection({
-    required this.title,
-    required this.child,
-  });
+  const _DetailSection({required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -787,9 +822,7 @@ class _DetailSection extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: const Color(0xFFC5D8EE),
-        ),
+        border: Border.all(color: const Color(0xFFC5D8EE)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.07),
@@ -799,8 +832,7 @@ class _DetailSection extends StatelessWidget {
         ],
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
@@ -810,10 +842,7 @@ class _DetailSection extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const Divider(
-            height: 24,
-            color: Color(0xFFE3E8EF),
-          ),
+          const Divider(height: 24, color: Color(0xFFE3E8EF)),
           child,
         ],
       ),
@@ -837,8 +866,7 @@ class _AddressRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           width: 37,
@@ -847,17 +875,12 @@ class _AddressRow extends StatelessWidget {
             color: color.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(
-            icon,
-            color: color,
-            size: 20,
-          ),
+          child: Icon(icon, color: color, size: 20),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
@@ -898,8 +921,7 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
           child: Text(
@@ -918,9 +940,7 @@ class _DetailRow extends StatelessWidget {
             style: GoogleFonts.inter(
               color: const Color(0xFF1A1D23),
               fontSize: bold ? 14 : 12.5,
-              fontWeight: bold
-                  ? FontWeight.w800
-                  : FontWeight.w600,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
             ),
           ),
         ),

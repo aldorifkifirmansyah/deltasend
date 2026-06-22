@@ -1,14 +1,17 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../services/routing_service.dart';
-import 'rating_screen.dart';
+import '../../utils/app_assets.dart';
 import '../chat/chat_screen.dart';
+import 'customer_bottom_bar.dart';
+import 'rating_screen.dart';
 
 class CustomerTrackingScreen extends StatefulWidget {
   final String orderId;
@@ -28,13 +31,13 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
   List<LatLng> _routePoints = [];
 
   LatLng? _lastRouteCalculationPosition;
-
   bool _isCalculatingRoute = false;
 
   String? _cachedDriverId;
   Future<Map<String, dynamic>?>? _driverProfileFuture;
 
   static const Color _primaryBlue = Color(0xFF133D87);
+  static const Color _headerBlue = Color(0xFF608BC0);
   static const Color _titleBlue = Color(0xFF608BC0);
   static const Color _textDark = Color(0xFF1A1D23);
   static const Color _textGrey = Color(0xFF6F7784);
@@ -50,6 +53,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
 
     if (_cachedDriverId != driverId || _driverProfileFuture == null) {
       _cachedDriverId = driverId;
+
       _driverProfileFuture = _orderService.fetchDriverProfile(driverId);
     }
 
@@ -89,7 +93,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
         _routePoints = points;
       });
     } catch (_) {
-      // Rute sebelumnya dipertahankan apabila request gagal.
+      // Rute sebelumnya tetap dipertahankan.
     } finally {
       _isCalculatingRoute = false;
     }
@@ -108,12 +112,11 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
       ]);
 
       _mapController.fitCamera(
-        CameraFit.bounds(
-          bounds: bounds,
-          padding: const EdgeInsets.fromLTRB(50, 100, 50, 330),
-        ),
+        CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(45)),
       );
-    } catch (_) {}
+    } catch (_) {
+      // Map mungkin belum siap.
+    }
   }
 
   void _openChat(OrderModel order) {
@@ -142,6 +145,12 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
         ),
       ),
     );
+  }
+
+  void _openRating(OrderModel order) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => RatingScreen(order: order)));
   }
 
   String _formatOrderId(String orderId) {
@@ -176,45 +185,32 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
   String _statusTitle(OrderStatus status) {
     switch (status) {
       case OrderStatus.pending:
-        return 'Mencari Driver';
+        return 'Waiting Driver';
 
       case OrderStatus.accepted:
-        return 'Driver Ditemukan';
+        return 'Driver Menuju Lokasi';
 
       case OrderStatus.pickingUp:
         return 'Menuju Lokasi Pickup';
 
       case OrderStatus.delivering:
-        return 'Paket Sedang Diantar';
+        return 'On Delivery';
 
       case OrderStatus.completed:
-        return 'Order Selesai';
+        return 'Order Completed';
 
       case OrderStatus.cancelled:
-        return 'Order Dibatalkan';
+        return 'Order Cancelled';
     }
   }
 
-  String _statusDescription(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pending:
-        return 'Sistem sedang mencari driver terdekat.';
-
-      case OrderStatus.accepted:
-        return 'Driver telah menerima order Anda.';
-
-      case OrderStatus.pickingUp:
-        return 'Driver sedang menuju lokasi penjemputan.';
-
-      case OrderStatus.delivering:
-        return 'Driver sedang mengantar paket ke lokasi tujuan.';
-
-      case OrderStatus.completed:
-        return 'Paket telah diterima di lokasi tujuan.';
-
-      case OrderStatus.cancelled:
-        return 'Order ini telah dibatalkan.';
+  LatLng _targetPosition(OrderModel order) {
+    if (order.status == OrderStatus.accepted ||
+        order.status == OrderStatus.pickingUp) {
+      return order.pickupLocation;
     }
+
+    return order.destinationLocation;
   }
 
   String _targetLabel(OrderStatus status) {
@@ -232,15 +228,6 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     }
 
     return order.destinationAddress;
-  }
-
-  LatLng _targetPosition(OrderModel order) {
-    if (order.status == OrderStatus.accepted ||
-        order.status == OrderStatus.pickingUp) {
-      return order.pickupLocation;
-    }
-
-    return order.destinationLocation;
   }
 
   double? _distanceToTarget(LatLng? driverPosition, LatLng targetPosition) {
@@ -276,11 +263,14 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F9FC),
+      extendBody: true,
+      bottomNavigationBar: const CustomerBottomBar(selectedIndex: 1),
       body: StreamBuilder<OrderModel?>(
         stream: _orderService.watchOrder(widget.orderId),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return _buildErrorState('Terjadi kesalahan: ${snapshot.error}');
+            return _buildErrorContent('Terjadi kesalahan: ${snapshot.error}');
           }
 
           if (snapshot.connectionState == ConnectionState.waiting &&
@@ -293,12 +283,12 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
           final OrderModel? order = snapshot.data;
 
           if (order == null) {
-            return _buildErrorState('Order tidak ditemukan.');
+            return _buildErrorContent('Order tidak ditemukan.');
           }
 
-          final LatLng destinationPosition = order.destinationLocation;
-
           final LatLng pickupPosition = order.pickupLocation;
+
+          final LatLng destinationPosition = order.destinationLocation;
 
           final LatLng? driverPosition = order.driverLocation;
 
@@ -307,7 +297,11 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
           if (driverPosition != null &&
               order.status != OrderStatus.completed &&
               order.status != OrderStatus.cancelled) {
-            _maybeUpdateRoute(driverPosition, targetPosition);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+
+              _maybeUpdateRoute(driverPosition, targetPosition);
+            });
           }
 
           final double? distanceKm = _distanceToTarget(
@@ -316,112 +310,171 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
           );
 
           return Stack(
+            fit: StackFit.expand,
             children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: driverPosition ?? targetPosition,
-                  initialZoom: 15,
-                  onMapReady: () {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-
-                      _focusMap(driverPosition, targetPosition);
-                    });
-                  },
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.deltasend.app',
-                  ),
-                  if (_routePoints.isNotEmpty)
-                    PolylineLayer(
-                      polylines: [
-                        Polyline(
-                          points: _routePoints,
-                          color: _primaryBlue,
-                          strokeWidth: 5,
-                        ),
-                      ],
-                    ),
-                  MarkerLayer(
-                    markers: [
-                      if (order.status == OrderStatus.accepted ||
-                          order.status == OrderStatus.pickingUp)
-                        Marker(
-                          point: pickupPosition,
-                          width: 52,
-                          height: 52,
-                          child: _MapMarker(
-                            icon: CupertinoIcons.location_north_fill,
-                            color: _pickupOrange,
-                          ),
-                        ),
-                      if (order.status == OrderStatus.delivering ||
-                          order.status == OrderStatus.completed)
-                        Marker(
-                          point: destinationPosition,
-                          width: 52,
-                          height: 52,
-                          child: _MapMarker(
-                            icon: CupertinoIcons.location_solid,
-                            color: _destinationRed,
-                          ),
-                        ),
-                      if (order.status == OrderStatus.delivering)
-                        Marker(
-                          point: pickupPosition,
-                          width: 42,
-                          height: 42,
-                          child: _MapMarker(
-                            icon: CupertinoIcons.location_north_fill,
-                            color: _pickupOrange,
-                            small: true,
-                          ),
-                        ),
-                      if (driverPosition != null)
-                        Marker(
-                          point: driverPosition,
-                          width: 58,
-                          height: 58,
-                          child: const _DriverMapMarker(),
-                        ),
-                    ],
-                  ),
-                ],
+              Image.asset(
+                AppAssets.loginBackground,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) {
+                  return const ColoredBox(color: Color(0xFFF7F9FC));
+                },
               ),
-
-              SafeArea(child: _buildTopHeader(order)),
-
-              Positioned(
-                right: 18,
-                bottom: 338,
+              SafeArea(
+                bottom: false,
                 child: Column(
                   children: [
-                    _MapControlButton(
-                      icon: Icons.my_location_rounded,
-                      onTap: () {
-                        _focusMap(driverPosition, targetPosition);
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    _MapControlButton(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      onTap: () => _openChat(order),
+                    const SizedBox(height: 12),
+
+                    SvgPicture.asset(AppAssets.logo, width: 195),
+
+                    const SizedBox(height: 20),
+
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.fromLTRB(22, 0, 22, 92),
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.12),
+                              blurRadius: 18,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            _buildCompactHeader(order),
+
+                            SizedBox(
+                              height: 215,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  FlutterMap(
+                                    mapController: _mapController,
+                                    options: MapOptions(
+                                      initialCenter:
+                                          driverPosition ?? targetPosition,
+                                      initialZoom: 15,
+                                      onMapReady: () {
+                                        WidgetsBinding.instance
+                                            .addPostFrameCallback((_) {
+                                              if (!mounted) {
+                                                return;
+                                              }
+
+                                              _focusMap(
+                                                driverPosition,
+                                                targetPosition,
+                                              );
+                                            });
+                                      },
+                                    ),
+                                    children: [
+                                      TileLayer(
+                                        urlTemplate:
+                                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                        userAgentPackageName:
+                                            'com.example.deltasend',
+                                      ),
+
+                                      if (_routePoints.isNotEmpty)
+                                        PolylineLayer(
+                                          polylines: [
+                                            Polyline(
+                                              points: _routePoints,
+                                              color: const Color(0xFF1686E8),
+                                              strokeWidth: 4,
+                                            ),
+                                          ],
+                                        ),
+
+                                      MarkerLayer(
+                                        markers: [
+                                          if (order.status ==
+                                                  OrderStatus.accepted ||
+                                              order.status ==
+                                                  OrderStatus.pickingUp)
+                                            Marker(
+                                              point: pickupPosition,
+                                              width: 46,
+                                              height: 46,
+                                              child: const _MapMarker(
+                                                icon: CupertinoIcons
+                                                    .location_north_fill,
+                                                color: _pickupOrange,
+                                              ),
+                                            ),
+
+                                          if (order.status ==
+                                                  OrderStatus.delivering ||
+                                              order.status ==
+                                                  OrderStatus.completed)
+                                            Marker(
+                                              point: destinationPosition,
+                                              width: 46,
+                                              height: 46,
+                                              child: const _MapMarker(
+                                                icon: CupertinoIcons
+                                                    .location_solid,
+                                                color: _destinationRed,
+                                              ),
+                                            ),
+
+                                          if (driverPosition != null)
+                                            Marker(
+                                              point: driverPosition,
+                                              width: 52,
+                                              height: 52,
+                                              child: const _DriverMapMarker(),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+
+                                  Positioned(
+                                    right: 10,
+                                    bottom: 10,
+                                    child: _MapControlButton(
+                                      icon: Icons.my_location_rounded,
+                                      onTap: () {
+                                        _focusMap(
+                                          driverPosition,
+                                          targetPosition,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            Expanded(
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  24,
+                                ),
+                                child: _buildTrackingPanel(
+                                  order: order,
+                                  distanceKm: distanceKm,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
-                ),
-              ),
-
-              Positioned(
-                left: 14,
-                right: 14,
-                bottom: 14,
-                child: _buildTrackingPanel(
-                  order: order,
-                  distanceKm: distanceKm,
                 ),
               ),
             ],
@@ -431,20 +484,13 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     );
   }
 
-  Widget _buildTopHeader(OrderModel order) {
+  Widget _buildCompactHeader(OrderModel order) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
-      padding: const EdgeInsets.fromLTRB(8, 10, 14, 10),
-      decoration: BoxDecoration(
-        color: _primaryBlue,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.20),
-            blurRadius: 12,
-            offset: const Offset(0, 5),
-          ),
-        ],
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(4, 8, 8, 8),
+      decoration: const BoxDecoration(
+        color: _headerBlue,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Row(
         children: [
@@ -455,33 +501,41 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
             icon: const Icon(
               Icons.arrow_back_ios_new_rounded,
               color: Colors.white,
-              size: 21,
+              size: 20,
             ),
           ),
-          const SizedBox(width: 2),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   _statusTitle(order.status),
-                  style: GoogleFonts.getFont(
-                    'ADLaM Display',
+                  style: GoogleFonts.inter(
                     color: Colors.white,
-                    fontSize: 18,
-                    height: 1.1,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   _formatOrderId(order.orderId),
                   style: GoogleFonts.inter(
-                    color: Colors.white.withValues(alpha: 0.76),
-                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.84),
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
+            ),
+          ),
+
+          IconButton(
+            onPressed: () => _openChat(order),
+            icon: const Icon(
+              Icons.chat_bubble_outline_rounded,
+              color: Colors.white,
+              size: 24,
             ),
           ),
         ],
@@ -494,25 +548,25 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     required double? distanceKm,
   }) {
     if (order.status == OrderStatus.completed) {
-      return _buildCompletedPanel(order);
+      return _buildCompletedContent(order);
     }
 
     if (order.status == OrderStatus.cancelled) {
-      return _buildCancelledPanel();
+      return _buildCancelledContent();
     }
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(18, 17, 18, 18),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _borderBlue),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 9,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -520,10 +574,14 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildDriverInformation(order),
+          _buildDriverInformationWithChat(order),
+
           const Divider(height: 28, color: Color(0xFFE4E9F0)),
+
           _buildStatusProgress(order.status),
+
           const SizedBox(height: 20),
+
           Row(
             children: [
               Expanded(
@@ -551,13 +609,15 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
               ),
             ],
           ),
+
           const SizedBox(height: 18),
+
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: _titleBlue.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(11),
@@ -565,10 +625,12 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                 child: const Icon(
                   Icons.location_on_outlined,
                   color: _primaryBlue,
-                  size: 23,
+                  size: 24,
                 ),
               ),
+
               const SizedBox(width: 12),
+
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,7 +642,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                     const SizedBox(height: 4),
                     Text(
                       _targetAddress(order),
-                      maxLines: 2,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
                         color: _textDark,
@@ -594,8 +656,10 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
               ),
             ],
           ),
+
           if (order.driverLocation == null) ...[
             const SizedBox(height: 14),
+
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
@@ -632,7 +696,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     );
   }
 
-  Widget _buildDriverInformation(OrderModel order) {
+  Widget _buildDriverInformationWithChat(OrderModel order) {
     final Future<Map<String, dynamic>?>? profileFuture = _getDriverProfile(
       order.driverId,
     );
@@ -641,7 +705,9 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
       return Row(
         children: [
           const _DriverAvatar(imageUrl: ''),
-          const SizedBox(width: 13),
+
+          const SizedBox(width: 12),
+
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,10 +722,23 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  _statusDescription(order.status),
-                  style: GoogleFonts.inter(color: _textGrey, fontSize: 12.5),
+                  'Driver belum menerima pesanan.',
+                  style: GoogleFonts.inter(color: _textGrey, fontSize: 12),
                 ),
               ],
+            ),
+          ),
+
+          Material(
+            color: const Color(0xFFF2F6FB),
+            shape: const CircleBorder(),
+            child: IconButton(
+              onPressed: () => _openChat(order),
+              icon: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                color: _primaryBlue,
+                size: 23,
+              ),
             ),
           ),
         ],
@@ -669,28 +748,28 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     return FutureBuilder<Map<String, dynamic>?>(
       future: profileFuture,
       builder: (context, snapshot) {
-        final Map<String, dynamic>? driverData = snapshot.data;
+        final Map<String, dynamic>? data = snapshot.data;
 
-        final String driverName = driverData?['name'] as String? ?? 'Driver';
+        final String name = data?['name'] as String? ?? 'Driver';
 
-        final String photoUrl = driverData?['photo_url'] as String? ?? '';
+        final String photoUrl = data?['photo_url'] as String? ?? '';
 
-        final double rating =
-            (driverData?['rating_avg'] as num?)?.toDouble() ?? 0;
+        final double rating = (data?['rating_avg'] as num?)?.toDouble() ?? 0;
 
-        final int ratingCount =
-            (driverData?['rating_count'] as num?)?.toInt() ?? 0;
+        final int ratingCount = (data?['rating_count'] as num?)?.toInt() ?? 0;
 
         return Row(
           children: [
             _DriverAvatar(imageUrl: photoUrl),
-            const SizedBox(width: 13),
+
+            const SizedBox(width: 12),
+
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    driverName,
+                    name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.inter(
@@ -699,7 +778,9 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+
                   const SizedBox(height: 5),
+
                   Row(
                     children: [
                       const Icon(
@@ -707,7 +788,9 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                         color: Color(0xFFFFB800),
                         size: 18,
                       ),
-                      const SizedBox(width: 4),
+
+                      const SizedBox(width: 5),
+
                       Text(
                         rating > 0 ? rating.toStringAsFixed(1) : 'Baru',
                         style: GoogleFonts.inter(
@@ -716,8 +799,9 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+
                       if (ratingCount > 0) ...[
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 5),
                         Text(
                           '($ratingCount rating)',
                           style: GoogleFonts.inter(
@@ -729,6 +813,19 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                     ],
                   ),
                 ],
+              ),
+            ),
+
+            Material(
+              color: const Color(0xFFF2F6FB),
+              shape: const CircleBorder(),
+              child: IconButton(
+                onPressed: () => _openChat(order),
+                icon: const Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  color: _primaryBlue,
+                  size: 23,
+                ),
               ),
             ),
           ],
@@ -758,14 +855,18 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
           completed: activeStep >= 1,
           active: activeStep == 1,
         ),
+
         _ProgressLine(completed: activeStep >= 2),
+
         _ProgressStep(
           icon: Icons.local_shipping_outlined,
           label: 'Delivery',
           completed: activeStep >= 2,
           active: activeStep == 2,
         ),
+
         _ProgressLine(completed: activeStep >= 3),
+
         _ProgressStep(
           icon: Icons.check_circle_outline_rounded,
           label: 'Selesai',
@@ -776,70 +877,69 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     );
   }
 
-  Widget _buildCompletedPanel(OrderModel order) {
+  Widget _buildCompletedContent(OrderModel order) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _borderBlue),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 9,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 72,
-            height: 72,
+            width: 65,
+            height: 65,
             decoration: BoxDecoration(
-              color: _successGreen.withValues(alpha: 0.12),
+              color: _successGreen.withValues(alpha: 0.13),
               shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.check_circle_rounded,
               color: _successGreen,
-              size: 48,
+              size: 45,
             ),
           ),
-          const SizedBox(height: 14),
+
+          const SizedBox(height: 13),
+
           Text(
             'Pesanan Telah Tiba!',
             style: GoogleFonts.getFont(
               'ADLaM Display',
               color: _titleBlue,
-              fontSize: 21,
+              fontSize: 20,
             ),
           ),
+
           const SizedBox(height: 7),
+
           Text(
             'Paket telah berhasil dikirim ke lokasi tujuan.',
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               color: _textGrey,
-              fontSize: 13,
+              fontSize: 12.5,
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 20),
+
+          const SizedBox(height: 18),
+
           SizedBox(
             width: double.infinity,
-            height: 49,
+            height: 47,
             child: ElevatedButton.icon(
               onPressed: order.rating == null
-                  ? () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(
-                          builder: (_) => RatingScreen(order: order),
-                        ),
-                      );
-                    }
+                  ? () => _openRating(order)
                   : () {
                       Navigator.of(context).popUntil((route) => route.isFirst);
                     },
@@ -848,7 +948,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(11),
                 ),
               ),
               icon: Icon(
@@ -860,7 +960,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
               label: Text(
                 order.rating == null ? 'Beri Rating' : 'Kembali ke Home',
                 style: GoogleFonts.inter(
-                  fontSize: 14,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -871,108 +971,84 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     );
   }
 
-  Widget _buildCancelledPanel() {
+  Widget _buildCancelledContent() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _borderBlue),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 7),
-          ),
-        ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.cancel_rounded, color: Color(0xFFD14343), size: 58),
+          const Icon(Icons.cancel_rounded, color: Color(0xFFD14343), size: 55),
+
           const SizedBox(height: 12),
+
           Text(
             'Order Dibatalkan',
             style: GoogleFonts.getFont(
               'ADLaM Display',
               color: const Color(0xFFD14343),
-              fontSize: 21,
+              fontSize: 20,
             ),
           ),
+
           const SizedBox(height: 8),
+
           Text(
             'Order ini sudah tidak dapat diproses.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.inter(color: _textGrey, fontSize: 13),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 49,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryBlue,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(
-                'Kembali ke Home',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w700),
-              ),
-            ),
+            style: GoogleFonts.inter(color: _textGrey, fontSize: 12.5),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildErrorState(String message) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.error_outline_rounded,
-                  color: Color(0xFFD14343),
-                  size: 54,
+  Widget _buildErrorContent(String message) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Color(0xFFD14343),
+                size: 54,
+              ),
+
+              const SizedBox(height: 14),
+
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  color: _textGrey,
+                  fontSize: 14,
+                  height: 1.4,
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    color: _textGrey,
-                    fontSize: 14,
-                    height: 1.4,
-                  ),
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).maybePop();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primaryBlue,
+                  foregroundColor: Colors.white,
                 ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).maybePop();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primaryBlue,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(
-                    'Kembali',
-                    style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                  ),
+                child: Text(
+                  'Kembali',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w600),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -983,13 +1059,8 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
 class _MapMarker extends StatelessWidget {
   final IconData icon;
   final Color color;
-  final bool small;
 
-  const _MapMarker({
-    required this.icon,
-    required this.color,
-    this.small = false,
-  });
+  const _MapMarker({required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -1005,7 +1076,7 @@ class _MapMarker extends StatelessWidget {
           ),
         ],
       ),
-      child: Icon(icon, color: color, size: small ? 28 : 36),
+      child: Icon(icon, color: color, size: 33),
     );
   }
 }
@@ -1031,7 +1102,7 @@ class _DriverMapMarker extends StatelessWidget {
       child: const Icon(
         Icons.delivery_dining_rounded,
         color: Colors.white,
-        size: 31,
+        size: 29,
       ),
     );
   }
@@ -1047,11 +1118,11 @@ class _MapControlButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      elevation: 5,
+      elevation: 4,
       shape: const CircleBorder(),
       child: IconButton(
         onPressed: onTap,
-        icon: Icon(icon, color: const Color(0xFF133D87), size: 22),
+        icon: Icon(icon, color: const Color(0xFF133D87), size: 21),
       ),
     );
   }
@@ -1065,15 +1136,15 @@ class _DriverAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 54,
-      height: 54,
+      width: 52,
+      height: 52,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: const Color(0xFF608BC0).withValues(alpha: 0.14),
         shape: BoxShape.circle,
       ),
       child: imageUrl.trim().isEmpty
-          ? const Icon(Icons.person_rounded, color: Color(0xFF133D87), size: 31)
+          ? const Icon(Icons.person_rounded, color: Color(0xFF133D87), size: 30)
           : Image.network(
               imageUrl,
               fit: BoxFit.cover,
@@ -1081,7 +1152,7 @@ class _DriverAvatar extends StatelessWidget {
                 return const Icon(
                   Icons.person_rounded,
                   color: Color(0xFF133D87),
-                  size: 31,
+                  size: 30,
                 );
               },
             ),
@@ -1103,7 +1174,7 @@ class _TrackingInformationBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 11),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F8FC),
         borderRadius: BorderRadius.circular(11),
@@ -1111,8 +1182,10 @@ class _TrackingInformationBox extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(icon, color: const Color(0xFF608BC0), size: 20),
+          Icon(icon, color: const Color(0xFF608BC0), size: 21),
+
           const SizedBox(height: 5),
+
           Text(
             label,
             style: GoogleFonts.inter(
@@ -1120,11 +1193,14 @@ class _TrackingInformationBox extends StatelessWidget {
               fontSize: 10.5,
             ),
           ),
+
           const SizedBox(height: 3),
+
           Text(
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               color: const Color(0xFF1A1D23),
               fontSize: 11.5,
@@ -1159,8 +1235,8 @@ class _ProgressStep extends StatelessWidget {
     return Column(
       children: [
         Container(
-          width: 34,
-          height: 34,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
             color: completed ? color : const Color(0xFFF1F4F8),
             shape: BoxShape.circle,
@@ -1171,10 +1247,12 @@ class _ProgressStep extends StatelessWidget {
           child: Icon(
             completed && !active ? Icons.check_rounded : icon,
             color: completed ? Colors.white : color,
-            size: 18,
+            size: 19,
           ),
         ),
+
         const SizedBox(height: 5),
+
         Text(
           label,
           style: GoogleFonts.inter(

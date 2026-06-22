@@ -12,7 +12,14 @@ import 'customer_order_detail_screen.dart';
 enum _OrderFilter { all, active, completed, cancelled }
 
 class CustomerOrderHistoryScreen extends StatefulWidget {
-  const CustomerOrderHistoryScreen({super.key});
+  final bool embedded;
+  final bool showHeader;
+
+  const CustomerOrderHistoryScreen({
+    super.key,
+    this.embedded = false,
+    this.showHeader = true,
+  });
 
   @override
   State<CustomerOrderHistoryScreen> createState() =>
@@ -22,17 +29,23 @@ class CustomerOrderHistoryScreen extends StatefulWidget {
 class _CustomerOrderHistoryScreenState
     extends State<CustomerOrderHistoryScreen> {
   final OrderService _orderService = OrderService();
+
   final TextEditingController _searchController = TextEditingController();
 
   late final Stream<List<OrderModel>> _orderStream;
 
   _OrderFilter _selectedFilter = _OrderFilter.all;
+
   String _searchQuery = '';
 
   static const Color _primaryBlue = Color(0xFF133D87);
+
   static const Color _titleBlue = Color(0xFF608BC0);
+
   static const Color _textDark = Color(0xFF1A1D23);
+
   static const Color _textGrey = Color(0xFF6F7784);
+
   static const Color _borderBlue = Color(0xFFC5D8EE);
 
   @override
@@ -131,12 +144,15 @@ class _CustomerOrderHistoryScreenState
 
     final String minute = date.minute.toString().padLeft(2, '0');
 
-    return '$day ${monthNames[date.month - 1]} '
-        '${date.year}, $hour:$minute';
+    return '$day '
+        '${monthNames[date.month - 1]} '
+        '${date.year}, '
+        '$hour:$minute';
   }
 
   String _formatCurrency(double value) {
     final String raw = value.toStringAsFixed(0);
+
     final StringBuffer result = StringBuffer();
 
     for (int index = 0; index < raw.length; index++) {
@@ -220,6 +236,22 @@ class _CustomerOrderHistoryScreenState
 
   @override
   Widget build(BuildContext context) {
+    final Widget content = Column(
+      children: [
+        if (widget.showHeader) ...[_buildHeader(), const SizedBox(height: 14)],
+        _buildSearchField(),
+        _buildFilterSection(),
+        Expanded(child: _buildOrderList()),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+        child: content,
+      );
+    }
+
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -255,14 +287,7 @@ class _CustomerOrderHistoryScreenState
                         ),
                       ],
                     ),
-                    child: Column(
-                      children: [
-                        _buildHeader(),
-                        _buildSearchField(),
-                        _buildFilterSection(),
-                        Expanded(child: _buildOrderList()),
-                      ],
-                    ),
+                    child: content,
                   ),
                 ),
               ],
@@ -275,19 +300,22 @@ class _CustomerOrderHistoryScreenState
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () {
-              Navigator.of(context).maybePop();
-            },
-            icon: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: _textDark,
-              size: 23,
-            ),
-          ),
+          if (!widget.embedded)
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).maybePop();
+              },
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: _textDark,
+                size: 23,
+              ),
+            )
+          else
+            const SizedBox(width: 48),
           Expanded(
             child: Text(
               'Orders',
@@ -307,7 +335,7 @@ class _CustomerOrderHistoryScreenState
 
   Widget _buildSearchField() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: TextField(
         controller: _searchController,
         onChanged: (value) {
@@ -364,7 +392,7 @@ class _CustomerOrderHistoryScreenState
       height: 70,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 14),
         children: [
           _FilterButton(
             label: 'All',
@@ -434,7 +462,7 @@ class _CustomerOrderHistoryScreenState
         }
 
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 34),
+          padding: const EdgeInsets.fromLTRB(2, 4, 2, 105),
           itemCount: orders.length,
           separatorBuilder: (_, __) {
             return const SizedBox(height: 13);
