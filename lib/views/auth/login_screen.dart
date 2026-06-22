@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../utils/app_assets.dart';
 import '../../viewmodels/auth_viewmodel.dart';
-import 'register_role_screen.dart';
+import 'role_selection_screen.dart';
 import 'role_home.dart';
 import 'forgot_password_screen.dart';
 
@@ -103,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _goToRegisterRole() {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const RegisterRoleScreen()));
+    ).push(MaterialPageRoute(builder: (_) => const RoleSelectionScreen()));
   }
 
   void _goToForgotPassword() {

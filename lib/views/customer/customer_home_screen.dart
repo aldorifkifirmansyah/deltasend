@@ -7,6 +7,7 @@ import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../utils/app_assets.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../../widgets/edit_name_dialog.dart';
 import '../auth/login_screen.dart';
 import 'customer_create_order_screen.dart';
 import 'rating_screen.dart';
@@ -70,6 +71,28 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => RatingScreen(order: order)));
+  }
+
+  Future<void> _showEditNameDialog(String currentName) async {
+    // Dialog hanya mengembalikan teks (tanpa async di dalamnya).
+    final String? newName = await showDialog<String>(
+      context: context,
+      builder: (_) => EditNameDialog(initialName: currentName),
+    );
+
+    if (!mounted) return;
+    if (newName == null || newName.isEmpty || newName == currentName) return;
+
+    // Update Firestore dijalankan di sini, setelah dialog benar-benar tertutup.
+    final auth = context.read<AuthViewModel>();
+    final bool ok = await auth.updateUserName(newName);
+    if (!mounted) return;
+
+    _showFeatureMessage(
+      ok
+          ? 'Nama berhasil diperbarui'
+          : (auth.errorMessage ?? 'Gagal memperbarui nama'),
+    );
   }
 
   void _showFeatureMessage(String message) {
@@ -594,7 +617,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
         const SizedBox(height: 30),
 
-        Container(
+        Stack(
+          children: [
+            Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -661,6 +686,21 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               ),
             ],
           ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: _titleBlue,
+                ),
+                tooltip: 'Edit nama',
+                onPressed: () => _showEditNameDialog(name),
+              ),
+            ),
+          ],
         ),
 
         const SizedBox(height: 100),
