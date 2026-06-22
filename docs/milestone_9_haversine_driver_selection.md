@@ -97,12 +97,20 @@ Device fisik (atau emulator dengan mock location).
 
 ## 8. Hasil Pengujian
 
-- `flutter analyze` (distance_helper, order_service, driver_order_list_screen) → **No issues found!**
-- Ranking & filter dihitung pure client-side; `watchPendingOrders()` tidak berubah. ✔
-- Fallback saat lokasi null (denied / serviceOff / error) menampilkan banner + semua order. ✔
-- Pull-to-refresh memanggil ulang `_initDriverLocation()`. ✔
+**Terverifikasi end-to-end di device fisik** (bukan sekadar analyze).
 
-> Catatan: pengujian end-to-end di device fisik (skenario 1–6 di atas, termasuk mock location > 10 km) dilakukan oleh tester sesuai checklist.
+- `flutter analyze` (distance_helper, order_service, driver_order_list_screen) → **No issues found!** ✔
+- **Filter radius tervalidasi pakai jarak geografis asli** — diuji dengan order di kota berbeda (driver di **Jember** vs lokasi order di **Bondowoso**, ±35 km), **bukan** dengan memaksa `kMaxOrderRadiusKm` jadi kecil. Order di luar radius 10 km **benar-benar hilang** dari list, dan kembali muncul saat dalam radius. ✔
+- **Badge jarak akurat** — nilai "X.X km dari kamu" pada tiap card sesuai jarak Haversine driver→pickup yang sebenarnya. ✔
+- Ranking ascending: order terdekat tampil paling atas. ✔
+- **Ketiga banner state tervalidasi:**
+  - `denied` → banner + tombol **"Coba Lagi"** → re-trigger permission request berfungsi. ✔
+  - `deniedForever` → banner "diblokir permanen" + tombol **"Buka Settings"** → `Geolocator.openAppSettings()` membuka App Info/Permissions. ✔
+  - `serviceOff` → banner "GPS tidak aktif" + tombol **"Buka Pengaturan"** → `Geolocator.openLocationSettings()` membuka toggle GPS. ✔
+- Saat lokasi tidak tersedia: semua order tetap tampil tanpa filter (fallback aman). ✔
+- **Pull-to-refresh** setelah pindah lokasi / mengaktifkan izin dari Settings → daftar & urutan ter-update sesuai posisi baru. ✔
+
+> Status: **PASS**. Penanganan `deniedForever` (terpisah dari `denied`, dengan aksi `openAppSettings`) ditambahkan setelah iterasi awal dan ikut tervalidasi.
 
 ## 9. Known Limitation
 

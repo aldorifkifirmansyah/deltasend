@@ -132,3 +132,20 @@ flutter run
 ## Status
 
 > **SELESAI** — Auth multi-role berfungsi dengan UID asli. Siap lanjut Milestone 5.
+
+---
+
+## Addendum — Google Sign-In `serverClientId` (menuntaskan migrasi v7)
+
+**Konteks:** Pada pengujian Google Sign-In muncul error `serverClientId must be provided on Android`. Migrasi `google_sign_in` v6→v7 belum lengkap — API v7 (`GoogleSignIn.instance.initialize(...)`) butuh `serverClientId` eksplisit di Android agar `idToken` punya audience yang benar untuk Firebase Auth (di v6 nilai ini terbaca otomatis dari `google-services.json`).
+
+**Fix:**
+- File baru `lib/constants/app_constants.dart` — konstanta `kGoogleServerClientId` (Web client ID OAuth 2.0 dari Firebase project), tidak di-hardcode inline supaya gampang diganti kalau project pindah.
+- `lib/viewmodels/auth_viewmodel.dart` — `initialize()` (lazy-init di dalam `signInWithGoogle()`, dijaga flag `_googleInitialized`, dipanggil sebelum `authenticate()`) sekarang:
+  ```dart
+  await _googleSignIn.initialize(serverClientId: kGoogleServerClientId);
+  ```
+
+**Catatan:** Pastikan di sisi Firebase/Google Cloud — SHA-1/SHA-256 (debug & release) sudah terdaftar dan client ID yang dipakai bertipe **Web** (bukan Android), kalau tidak Google Sign-In tetap gagal walau kode benar.
+
+**Hasil:** error `serverClientId must be provided` hilang; flow Google sign-up (→ role selection) & sign-in berfungsi. Menggantikan catatan "Google Sign-In belum diuji penuh" pada Known Limitation di atas.
