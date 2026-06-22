@@ -739,16 +739,17 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
   Widget _buildBottomNavigation() {
     return Container(
-      height: 82,
       decoration: const BoxDecoration(
         color: _primaryBlue,
         borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
+        child: SizedBox(
+          height: 72,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
             _BottomNavigationItem(
               icon: Icons.home_rounded,
               label: 'Home',
@@ -789,6 +790,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               },
             ),
           ],
+          ),
         ),
       ),
     );

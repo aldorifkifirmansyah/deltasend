@@ -31,30 +31,6 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
 
   bool _isCalculatingRoute = false;
 
-  // participant chat di-cache supaya tombol chat di AppBar bisa aktif
-  String? _chatCustomerId;
-  String? _chatDriverId;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadChatParticipants();
-  }
-
-  Future<void> _loadChatParticipants() async {
-    try {
-      final order = await _orderService.fetchOrderById(widget.orderId);
-      if (!mounted || order == null) return;
-      if (order.driverId == null || order.driverId!.isEmpty) return;
-      setState(() {
-        _chatCustomerId = order.customerId;
-        _chatDriverId = order.driverId;
-      });
-    } catch (_) {
-      // gagal load participant → tombol chat tetap tersembunyi
-    }
-  }
-
   String? _cachedDriverId;
   Future<Map<String, dynamic>?>? _driverProfileFuture;
 
@@ -140,14 +116,30 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
     } catch (_) {}
   }
 
-  void _showChatMessage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Fitur chat dengan driver akan dihubungkan pada tahap berikutnya.',
-          style: GoogleFonts.inter(),
+  void _openChat(OrderModel order) {
+    final String? driverId = order.driverId;
+
+    if (driverId == null || driverId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Chat belum tersedia, menunggu driver.',
+            style: GoogleFonts.inter(),
+          ),
+          behavior: SnackBarBehavior.floating,
         ),
-        behavior: SnackBarBehavior.floating,
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          orderId: order.orderId,
+          currentUserId: order.customerId,
+          customerId: order.customerId,
+          driverId: driverId,
+        ),
       ),
     );
   }
@@ -284,28 +276,6 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lacak Driver'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        actions: [
-          if (_chatCustomerId != null && _chatDriverId != null)
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
-              tooltip: 'Chat Driver',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ChatScreen(
-                    orderId: widget.orderId,
-                    currentUserId: _chatCustomerId!,
-                    customerId: _chatCustomerId!,
-                    driverId: _chatDriverId!,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
       body: StreamBuilder<OrderModel?>(
         stream: _orderService.watchOrder(widget.orderId),
         builder: (context, snapshot) {
@@ -439,7 +409,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                     const SizedBox(height: 10),
                     _MapControlButton(
                       icon: Icons.chat_bubble_outline_rounded,
-                      onTap: _showChatMessage,
+                      onTap: () => _openChat(order),
                     ),
                   ],
                 ),
@@ -512,14 +482,6 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                   ),
                 ),
               ],
-            ),
-          ),
-          IconButton(
-            onPressed: _showChatMessage,
-            icon: const Icon(
-              Icons.chat_bubble_outline_rounded,
-              color: Colors.white,
-              size: 23,
             ),
           ),
         ],
@@ -767,18 +729,6 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
                     ],
                   ),
                 ],
-              ),
-            ),
-            Material(
-              color: _primaryBlue.withValues(alpha: 0.10),
-              shape: const CircleBorder(),
-              child: IconButton(
-                onPressed: _showChatMessage,
-                icon: const Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  color: _primaryBlue,
-                  size: 21,
-                ),
               ),
             ),
           ],
