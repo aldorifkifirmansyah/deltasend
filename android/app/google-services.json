@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "21422812082",
+    "project_id": "deltasend-pbm4",
+    "storage_bucket": "deltasend-pbm4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:21422812082:android:c101832119ad3ebbe312ab",
+        "android_client_info": {
+          "package_name": "com.example.deltasend"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "21422812082-5nh0336j09vv5pc9jlmma2dlra72scgm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.deltasend",
+            "certificate_hash": "c97ef9cb26fc5c63583017cbd83a1bc8e096e976"
+          }
+        },
+        {
+          "client_id": "21422812082-f8uai0bfip4ifm2h6u923idpifs3dpac.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAg1-O5FY7-uqjsr-PJND3dt_H5nBG2-nA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "21422812082-f8uai0bfip4ifm2h6u923idpifs3dpac.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "21422812082-ub65lkfb25ba4846c93i88ldunrpiugr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.deltasend"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
