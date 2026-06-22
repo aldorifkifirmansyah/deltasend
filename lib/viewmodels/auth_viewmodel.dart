@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../constants/app_constants.dart';
 import '../models/user_model.dart';
 import 'dart:async';
 
@@ -96,7 +97,7 @@ class AuthViewModel extends ChangeNotifier {
     _setLoading(true);
     try {
       if (!_googleInitialized) {
-        await _googleSignIn.initialize();
+        await _googleSignIn.initialize(serverClientId: kGoogleServerClientId);
         _googleInitialized = true;
       }
 
@@ -196,6 +197,30 @@ class AuthViewModel extends ChangeNotifier {
       return false;
     } catch (e) {
       _errorMessage = 'Terjadi kesalahan: $e';
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> updateUserName(String name) async {
+    final user = _currentUser;
+    if (user == null) return false;
+
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      _errorMessage = 'Nama tidak boleh kosong.';
+      return false;
+    }
+
+    _errorMessage = null;
+    _setLoading(true);
+    try {
+      await _db.collection('users').doc(user.uid).update({'name': trimmed});
+      _currentUser = user.copyWith(name: trimmed);
+      return true;
+    } catch (e) {
+      _errorMessage = 'Gagal memperbarui nama: $e';
       return false;
     } finally {
       _setLoading(false);
