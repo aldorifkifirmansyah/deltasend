@@ -1,5 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/order_model.dart';
+import '../utils/distance_helper.dart';
+
+/// Pasangan order + jarak driver→pickup (km), buat ditampilkan di UI.
+class OrderWithDistance {
+  final OrderModel order;
+  final double distanceKm;
+
+  OrderWithDistance({required this.order, required this.distanceKm});
+}
 
 class OrderService {
   // 1. buat instance Firestore
@@ -88,6 +98,33 @@ class OrderService {
 
           return orders;
         });
+  }
+
+  // 5a. transformasi pending orders: hitung jarak driver→pickup (Haversine),
+  // filter dalam radius, lalu urutkan ascending. Dipanggil dari screen setelah
+  // snapshot watchPendingOrders() diterima (pure client-side, no Firestore write).
+  List<OrderWithDistance> sortAndFilterByDistance({
+    required List<OrderModel> orders,
+    required Position driverPosition,
+    double maxRadiusKm = kMaxOrderRadiusKm,
+  }) {
+    final result =
+        orders
+            .map((order) {
+              final distanceKm = calculateHaversineDistance(
+                driverPosition.latitude,
+                driverPosition.longitude,
+                order.pickupLocation.latitude,
+                order.pickupLocation.longitude,
+              );
+              return OrderWithDistance(order: order, distanceKm: distanceKm);
+            })
+            .where((item) => item.distanceKm <= maxRadiusKm)
+            .toList();
+
+    result.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+
+    return result;
   }
 
   // 5b. method buat listen order aktif milik driver (pickingUp / delivering)
