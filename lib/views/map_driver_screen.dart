@@ -38,7 +38,6 @@ class _MapDriverScreenState extends State<MapDriverScreen>
   static const Color _titleBlue = Color(0xFF608BC0);
   static const Color _textDark = Color(0xFF1A1D23);
   static const Color _textGrey = Color(0xFF6F7784);
-  static const Color _borderBlue = Color(0xFFC5D8EE);
   static const Color _successGreen = Color(0xFF0AAA55);
   static const Color _dangerRed = Color(0xFFD14343);
 
@@ -269,7 +268,7 @@ class _MapDriverScreenState extends State<MapDriverScreen>
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: Color(0xFFF7F9FC));
             },
           ),
@@ -543,7 +542,7 @@ class _MapDriverScreenState extends State<MapDriverScreen>
                         : Image.network(
                             customerPhoto,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) {
+                            errorBuilder: (_, _, _) {
                               return const Icon(
                                 Icons.person_rounded,
                                 color: _primaryBlue,

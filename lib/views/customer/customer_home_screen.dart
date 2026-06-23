@@ -134,7 +134,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: _pageBackground);
             },
           ),
@@ -758,7 +758,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                           : Image.network(
                               photoUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) {
+                              errorBuilder: (_, _, _) {
                                 return const Icon(
                                   Icons.person_rounded,
                                   color: _primaryBlue,

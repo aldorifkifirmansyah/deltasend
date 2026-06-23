@@ -32,7 +32,6 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
   static const Color _titleBlue = Color(0xFF608BC0);
   static const Color _textDark = Color(0xFF1A1D23);
   static const Color _textGrey = Color(0xFF6F7784);
-  static const Color _borderBlue = Color(0xFFC5D8EE);
   static const Color _successGreen = Color(0xFF0AAA55);
 
   Future<Map<String, dynamic>?>? _getDriverProfile(String? driverId) {
@@ -219,7 +218,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
               Image.asset(
                 AppAssets.loginBackground,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) {
+                errorBuilder: (_, _, _) {
                   return const ColoredBox(color: Color(0xFFF7F9FC));
                 },
               ),
@@ -445,7 +444,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
               : Image.network(
                   photoUrl,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) {
+                  errorBuilder: (_, _, _) {
                     return const Icon(
                       Icons.person_rounded,
                       color: _primaryBlue,
@@ -625,7 +624,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
             ),
           );
         },
-        errorBuilder: (_, __, ___) {
+        errorBuilder: (_, _, _) {
           return _buildPhotoError();
         },
       );
@@ -641,7 +640,7 @@ class _CustomerOrderDetailScreenState extends State<CustomerOrderDetailScreen> {
       imageBytes,
       width: double.infinity,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
+      errorBuilder: (_, _, _) {
         return _buildPhotoError();
       },
     );

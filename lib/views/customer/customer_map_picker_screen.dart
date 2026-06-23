@@ -707,7 +707,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
       shrinkWrap: true,
       padding: EdgeInsets.zero,
       itemCount: _searchResults.length,
-      separatorBuilder: (_, __) {
+      separatorBuilder: (_, _) {
         return const Divider(height: 1, color: Color(0xFFE6EAF0));
       },
       itemBuilder: (context, index) {
