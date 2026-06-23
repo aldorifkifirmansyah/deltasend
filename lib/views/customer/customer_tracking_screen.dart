@@ -315,7 +315,7 @@ class _CustomerTrackingScreenState extends State<CustomerTrackingScreen> {
               Image.asset(
                 AppAssets.loginBackground,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) {
+                errorBuilder: (_, _, _) {
                   return const ColoredBox(color: Color(0xFFF7F9FC));
                 },
               ),
@@ -1148,7 +1148,7 @@ class _DriverAvatar extends StatelessWidget {
           : Image.network(
               imageUrl,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) {
+              errorBuilder: (_, _, _) {
                 return const Icon(
                   Icons.person_rounded,
                   color: Color(0xFF133D87),

@@ -259,7 +259,7 @@ class _CustomerOrderHistoryScreenState
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: Color(0xFFF7F9FC));
             },
           ),
@@ -464,7 +464,7 @@ class _CustomerOrderHistoryScreenState
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(2, 4, 2, 105),
           itemCount: orders.length,
-          separatorBuilder: (_, __) {
+          separatorBuilder: (_, _) {
             return const SizedBox(height: 13);
           },
           itemBuilder: (context, index) {

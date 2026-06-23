@@ -234,7 +234,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: _pageBackground);
             },
           ),
@@ -573,7 +573,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           : Image.network(
                               photoUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) {
+                              errorBuilder: (_, _, _) {
                                 return const Icon(
                                   Icons.person_rounded,
                                   color: _primaryBlue,
