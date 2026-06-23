@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../constants/app_constants.dart';
 import '../models/user_model.dart';
+import '../services/notification_service.dart';
 import 'dart:async';
 
 class AuthViewModel extends ChangeNotifier {
@@ -23,6 +24,11 @@ class AuthViewModel extends ChangeNotifier {
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();
+  }
+
+  // fire-and-forget: jangan blok flow auth menunggu dialog izin notif / token
+  void _registerFcmToken(String uid) {
+    unawaited(NotificationService().registerTokenForUser(uid));
   }
 
   Future<UserModel?> _loadUserDoc(String uid) async {
@@ -46,6 +52,7 @@ class AuthViewModel extends ChangeNotifier {
         return false;
       }
       _currentUser = user;
+      _registerFcmToken(user.uid);
       return true;
     } on FirebaseAuthException catch (e) {
       _errorMessage = _mapAuthError(e);
@@ -80,6 +87,7 @@ class AuthViewModel extends ChangeNotifier {
         'created_at': FieldValue.serverTimestamp(),
       });
       _currentUser = UserModel(uid: uid, email: email, name: name, role: role);
+      _registerFcmToken(uid);
       return true;
     } on FirebaseAuthException catch (e) {
       _errorMessage = _mapAuthError(e);
@@ -112,6 +120,7 @@ class AuthViewModel extends ChangeNotifier {
       final existing = await _loadUserDoc(fbUser.uid);
       if (existing != null) {
         _currentUser = existing;
+        _registerFcmToken(existing.uid);
       } else {
         // belum ada dokumen → role kosong supaya UI redirect ke select-role
         _currentUser = UserModel(
@@ -152,6 +161,7 @@ class AuthViewModel extends ChangeNotifier {
         'created_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       _currentUser = _currentUser!.copyWith(role: role);
+      _registerFcmToken(uid);
       return true;
     } catch (e) {
       _errorMessage = 'Gagal menyimpan role: $e';
@@ -228,6 +238,10 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    final uid = _currentUser?.uid;
+    if (uid != null && uid.isNotEmpty) {
+      await NotificationService().clearTokenForUser(uid);
+    }
     await _auth.signOut();
     try {
       await _googleSignIn.signOut();
@@ -244,14 +258,17 @@ class AuthViewModel extends ChangeNotifier {
     }
 
     final user = await _loadUserDoc(fbUser.uid);
-    _currentUser =
-        user ??
-        UserModel(
-          uid: fbUser.uid,
-          email: fbUser.email ?? '',
-          name: fbUser.displayName ?? '',
-          role: '',
-        );
+    if (user != null) {
+      _currentUser = user;
+      _registerFcmToken(user.uid);
+    } else {
+      _currentUser = UserModel(
+        uid: fbUser.uid,
+        email: fbUser.email ?? '',
+        name: fbUser.displayName ?? '',
+        role: '',
+      );
+    }
     notifyListeners();
     return _currentUser;
   }
