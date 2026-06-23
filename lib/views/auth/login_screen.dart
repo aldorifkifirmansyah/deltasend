@@ -319,11 +319,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      SvgPicture.asset(
-                                        AppAssets.googleIcon,
-                                        width: 23,
-                                        height: 23,
-                                        fit: BoxFit.contain,
+                                      Image.asset(
+                                        'assets/images/ic_google.png',
+                                        width: 20,
+                                        height: 20,
                                       ),
                                       const SizedBox(width: 12),
                                       Text(
