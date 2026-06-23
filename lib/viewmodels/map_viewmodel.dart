@@ -6,7 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/order_model.dart';
-import '../services/routing_service.dart';
+import '../utils/routing_service.dart';
 
 class MapViewModel extends ChangeNotifier {
   final RoutingService _routingService = RoutingService();
