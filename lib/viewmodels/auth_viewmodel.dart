@@ -201,12 +201,14 @@ class AuthViewModel extends ChangeNotifier {
           _errorMessage = 'Koneksi internet bermasalah. Periksa jaringan Anda.';
           break;
         default:
-          _errorMessage = e.message ?? 'Gagal mengirim email reset password.';
+          _errorMessage =
+              'Gagal mengirim link reset. Periksa koneksi internet dan coba lagi.';
       }
 
       return false;
-    } catch (e) {
-      _errorMessage = 'Terjadi kesalahan: $e';
+    } catch (_) {
+      _errorMessage =
+          'Gagal mengirim link reset. Periksa koneksi internet dan coba lagi.';
       return false;
     } finally {
       _setLoading(false);

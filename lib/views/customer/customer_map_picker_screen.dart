@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../services/geocoding_service.dart';
+import '../../widgets/location_status_banner.dart';
 
 enum _LocationType { pickup, destination }
 
@@ -28,7 +29,8 @@ class CustomerMapPickerScreen extends StatefulWidget {
       _CustomerMapPickerScreenState();
 }
 
-class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
+class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen>
+    with WidgetsBindingObserver {
   final MapController _mapController = MapController();
 
   final TextEditingController _searchController = TextEditingController();
@@ -66,9 +68,14 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
 
   String? _searchError;
 
+  // null = lokasi normal/OK; selain itu tampilkan banner kuning persistent.
+  LocationBannerState? _locationBanner;
+
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addObserver(this);
 
     if (widget.initialPickup != null) {
       _pickupLat = widget.initialPickup!.latitude;
@@ -103,10 +110,49 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _debounceTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkLocationStatus();
+    }
+  }
+
+  // Re-check service+permission saat app resume; refresh banner kalau memang
+  // sedang menampilkan masalah lokasi (jangan munculkan banner secara proaktif).
+  Future<void> _checkLocationStatus() async {
+    if (_locationBanner == null) return;
+
+    try {
+      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!mounted) return;
+      if (!serviceEnabled) {
+        setState(() => _locationBanner = LocationBannerState.serviceOff);
+        return;
+      }
+
+      final LocationPermission permission =
+          await Geolocator.checkPermission();
+      if (!mounted) return;
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _locationBanner = LocationBannerState.deniedForever);
+        return;
+      }
+      if (permission == LocationPermission.denied) {
+        setState(() => _locationBanner = LocationBannerState.denied);
+        return;
+      }
+
+      setState(() => _locationBanner = null);
+    } catch (_) {
+      // biarkan banner apa adanya kalau pengecekan gagal
+    }
   }
 
   void _showSnack(String message) {
@@ -301,7 +347,9 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
       final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
       if (!serviceEnabled) {
-        _showSnack('Aktifkan layanan lokasi terlebih dahulu.');
+        if (mounted) {
+          setState(() => _locationBanner = LocationBannerState.serviceOff);
+        }
         return;
       }
 
@@ -312,15 +360,16 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
       }
 
       if (permission == LocationPermission.denied) {
-        _showSnack('Izin lokasi tidak diberikan.');
+        if (mounted) {
+          setState(() => _locationBanner = LocationBannerState.denied);
+        }
         return;
       }
 
       if (permission == LocationPermission.deniedForever) {
-        _showSnack(
-          'Izin lokasi diblokir permanen. '
-          'Aktifkan melalui pengaturan aplikasi.',
-        );
+        if (mounted) {
+          setState(() => _locationBanner = LocationBannerState.deniedForever);
+        }
         return;
       }
 
@@ -328,8 +377,13 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
         _isLoadingAddress = true;
       });
 
-      // Mengikuti kode lama yang sebelumnya berfungsi.
-      final Position position = await Geolocator.getCurrentPosition();
+      // timeLimit supaya tidak menggantung selamanya kalau GPS tak kunjung
+      // mendapatkan fix (akan melempar TimeoutException → finally reset loading).
+      final Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
 
       if (!mounted) return;
 
@@ -341,6 +395,7 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
         _selectedPoint = point;
         _searchResults = [];
         _searchError = null;
+        _locationBanner = null;
         _searchController.clear();
 
         if (_selectedType == _LocationType.pickup) {
@@ -397,10 +452,10 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
           longitude: point.longitude,
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
 
-      _showSnack('Gagal mendapatkan lokasi saat ini: $error');
+      _showSnack('Gagal mendapatkan lokasi. Pastikan GPS aktif lalu coba lagi.');
     } finally {
       if (mounted && _isLoadingAddress) {
         setState(() {
@@ -486,6 +541,14 @@ class _CustomerMapPickerScreenState extends State<CustomerMapPickerScreen> {
                 _buildTopBar(),
                 const SizedBox(height: 10),
                 _buildSearchPanel(),
+                if (_locationBanner != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                    child: LocationStatusBanner(
+                      state: _locationBanner!,
+                      onRetry: _useCurrentLocation,
+                    ),
+                  ),
                 const Spacer(),
                 _buildBottomPanel(),
               ],
