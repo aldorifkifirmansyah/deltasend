@@ -9,6 +9,7 @@ import '../models/order_model.dart';
 import '../services/order_service.dart';
 import '../utils/distance_helper.dart';
 import '../viewmodels/auth_viewmodel.dart';
+import '../widgets/location_status_banner.dart';
 import 'map_driver_screen.dart';
 
 enum _LocationState { loading, ready, denied, deniedForever, serviceOff, error }
@@ -27,7 +28,8 @@ class DriverOrderListScreen extends StatefulWidget {
   State<DriverOrderListScreen> createState() => _DriverOrderListScreenState();
 }
 
-class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
+class _DriverOrderListScreenState extends State<DriverOrderListScreen>
+    with WidgetsBindingObserver {
   final OrderService _orderService = OrderService();
   final Map<String, Future<Map<String, dynamic>?>> _customerProfileCache = {};
 
@@ -80,9 +82,25 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addObserver(this);
+
     _driverId = context.read<AuthViewModel>().currentUser?.uid ?? '';
 
     _initDriverLocation();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Auto re-check saat app resume (pelengkap pull-to-refresh, bukan pengganti).
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _initDriverLocation();
+    }
   }
 
   Future<void> _initDriverLocation() async {
@@ -134,7 +152,11 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
         return;
       }
 
-      final Position position = await Geolocator.getCurrentPosition();
+      final Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
 
       if (!mounted) return;
 
@@ -747,72 +769,25 @@ class _DriverOrderListScreenState extends State<DriverOrderListScreen> {
   }
 
   Widget _buildLocationBanner() {
-    String message;
-    String actionLabel;
-    VoidCallback action;
-
+    final LocationBannerState bannerState;
     switch (_locationState) {
       case _LocationState.deniedForever:
-        message = 'Izin lokasi diblokir permanen.';
-        actionLabel = 'Settings';
-        action = Geolocator.openAppSettings;
+        bannerState = LocationBannerState.deniedForever;
         break;
-
       case _LocationState.serviceOff:
-        message = 'GPS tidak aktif. Semua order ditampilkan.';
-        actionLabel = 'Aktifkan';
-        action = Geolocator.openLocationSettings;
+        bannerState = LocationBannerState.serviceOff;
         break;
-
       case _LocationState.denied:
-        message = 'Izin lokasi ditolak.';
-        actionLabel = 'Coba Lagi';
-        action = _initDriverLocation;
+        bannerState = LocationBannerState.denied;
         break;
-
       default:
-        message = 'Lokasi tidak dapat diperoleh.';
-        actionLabel = 'Coba Lagi';
-        action = _initDriverLocation;
+        bannerState = LocationBannerState.error;
     }
 
-    return Container(
+    return LocationStatusBanner(
+      state: bannerState,
+      onRetry: _initDriverLocation,
       margin: const EdgeInsets.only(bottom: 13),
-      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF6E0),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: const Color(0xFFF0C95C)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            color: Color(0xFFB8860B),
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              message,
-              style: GoogleFonts.inter(
-                color: const Color(0xFF8A6D00),
-                fontSize: 11.5,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: action,
-            child: Text(
-              actionLabel,
-              style: GoogleFonts.inter(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 

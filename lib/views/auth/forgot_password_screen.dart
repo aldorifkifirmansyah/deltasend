@@ -74,11 +74,22 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         const SnackBar(content: Text('Link reset password berhasil dikirim.')),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(auth.errorMessage ?? 'Gagal mengirim reset password.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              auth.errorMessage ??
+                  'Gagal mengirim link reset. Periksa koneksi internet dan coba lagi.',
+              style: GoogleFonts.inter(),
+            ),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Coba Lagi',
+              onPressed: _sendResetEmail,
+            ),
+          ),
+        );
     }
   }
 
