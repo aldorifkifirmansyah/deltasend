@@ -18,8 +18,6 @@ class AdminHomeScreen extends StatefulWidget {
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
-  final AdminViewModel _admin = AdminViewModel();
-
   static const Color _primaryBlue = Color(0xFF133D87);
 
   static const Color _titleBlue = Color(0xFF608BC0);
@@ -31,19 +29,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   static const Color _borderBlue = Color(0xFFC9D9ED);
 
   static const Color _pageBackground = Color(0xFFF8FAFD);
-
-  @override
-  void initState() {
-    super.initState();
-
-    _admin.initAdminDashboard();
-  }
-
-  @override
-  void dispose() {
-    _admin.dispose();
-    super.dispose();
-  }
 
   void _openOrders() {
     Navigator.of(context).pushAndRemoveUntil(
@@ -85,13 +70,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final AuthViewModel auth = context.watch<AuthViewModel>();
+    final AdminViewModel admin = context.watch<AdminViewModel>();
 
     final String adminName = auth.currentUser?.name.trim().isNotEmpty == true
         ? auth.currentUser!.name.trim()
         : 'Admin';
 
     return AnimatedBuilder(
-      animation: _admin,
+      animation: admin,
       builder: (context, child) {
         return Scaffold(
           backgroundColor: _pageBackground,
@@ -141,11 +127,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               const SizedBox(height: 28),
                               _buildOverviewHeader(),
                               const SizedBox(height: 18),
-                              _buildOverviewGrid(),
+                              _buildOverviewGrid(admin),
                               const SizedBox(height: 30),
                               _buildRecentHeader(),
                               const SizedBox(height: 13),
-                              _buildRecentOrders(),
+                              _buildRecentOrders(admin),
                             ],
                           ),
                         ),
@@ -251,8 +237,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     );
   }
 
-  Widget _buildOverviewGrid() {
-    if (_admin.isLoading) {
+  Widget _buildOverviewGrid(AdminViewModel admin) {
+    if (admin.isLoading) {
       return const SizedBox(
         height: 210,
         child: Center(child: CircularProgressIndicator(color: _primaryBlue)),
@@ -265,11 +251,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: 14,
       mainAxisSpacing: 14,
-      childAspectRatio: 1.52,
+      childAspectRatio: 1.42,
       children: [
         _DashboardCard(
           title: 'Total Orders',
-          value: _admin.totalOrders,
+          value: admin.totalOrders,
           icon: Icons.inventory_2_outlined,
           backgroundColor: const Color(0xFFE7F2FF),
           iconColor: const Color(0xFF397DB7),
@@ -278,7 +264,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         ),
         _DashboardCard(
           title: 'Active Drivers',
-          value: _admin.activeDrivers,
+          value: admin.activeDrivers,
           icon: Icons.delivery_dining_rounded,
           backgroundColor: const Color(0xFFE8F8EE),
           iconColor: const Color(0xFF179A5B),
@@ -286,7 +272,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         ),
         _DashboardCard(
           title: 'Ongoing Orders',
-          value: _admin.ongoingOrders,
+          value: admin.ongoingOrders,
           icon: Icons.access_time_rounded,
           backgroundColor: const Color(0xFFFFF7DD),
           iconColor: const Color(0xFFC79516),
@@ -295,7 +281,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         ),
         _DashboardCard(
           title: 'Completed',
-          value: _admin.completedOrders,
+          value: admin.completedOrders,
           icon: Icons.check_circle_outline_rounded,
           backgroundColor: const Color(0xFFF0EBFF),
           iconColor: const Color(0xFF7961C9),
@@ -333,9 +319,9 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     );
   }
 
-  Widget _buildRecentOrders() {
+  Widget _buildRecentOrders(AdminViewModel admin) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _admin.watchOrders(),
+      stream: admin.watchOrders(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return _buildMessageCard(
@@ -402,11 +388,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   ),
                 ),
                 subtitle: Text(
-                  _admin.statusLabel(status),
+                  admin.statusLabel(status),
                   style: GoogleFonts.inter(color: _textGrey, fontSize: 11.5),
                 ),
                 trailing: Text(
-                  _admin.formatTime(data['created_at']),
+                  admin.formatTime(data['created_at']),
                   style: GoogleFonts.inter(color: _textGrey, fontSize: 11),
                 ),
                 onTap: _openOrders,

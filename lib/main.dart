@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'utils/theme.dart';
 import 'package:deltasend/viewmodels/map_viewmodel.dart';
 import 'package:deltasend/viewmodels/auth_viewmodel.dart';
+import 'package:deltasend/viewmodels/admin_viewmodel.dart';
 import 'package:deltasend/views/auth/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -42,6 +43,9 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => MapViewModel()),
         ChangeNotifierProvider(create: (_) => AuthViewModel()),
+        ChangeNotifierProvider(
+          create: (_) => AdminViewModel()..initAdminDashboard(),
+        ),
       ],
       child: const MyApp(),
     ),
