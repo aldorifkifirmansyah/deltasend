@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
@@ -13,6 +14,7 @@ import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../utils/app_assets.dart';
 import '../viewmodels/map_viewmodel.dart';
+import '../widgets/location_status_banner.dart';
 import 'chat/chat_screen.dart';
 import 'driver/driver_bottom_bar.dart';
 import 'driver/driver_home_screen.dart';
@@ -27,9 +29,12 @@ class MapDriverScreen extends StatefulWidget {
 }
 
 class _MapDriverScreenState extends State<MapDriverScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   String _base64Photo = '';
   bool _isLoading = false;
+
+  // null = lokasi OK; selain itu tampilkan banner masalah lokasi di peta.
+  LocationBannerState? _locationProblem;
 
   String? _cachedCustomerId;
   Future<Map<String, dynamic>?>? _customerFuture;
@@ -38,7 +43,6 @@ class _MapDriverScreenState extends State<MapDriverScreen>
   static const Color _titleBlue = Color(0xFF608BC0);
   static const Color _textDark = Color(0xFF1A1D23);
   static const Color _textGrey = Color(0xFF6F7784);
-  static const Color _borderBlue = Color(0xFFC5D8EE);
   static const Color _successGreen = Color(0xFF0AAA55);
   static const Color _dangerRed = Color(0xFFD14343);
 
@@ -46,13 +50,65 @@ class _MapDriverScreenState extends State<MapDriverScreen>
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addObserver(this);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final MapViewModel viewModel = context.read<MapViewModel>();
 
       viewModel.setTickerProvider(this);
       viewModel.fetchOrderData(widget.orderId);
       viewModel.initLocation();
+
+      _refreshLocationState();
     });
+  }
+
+  // Cek status GPS/izin (read-only, tidak request) untuk ditampilkan ke driver.
+  Future<void> _refreshLocationState() async {
+    try {
+      final bool serviceOn = await Geolocator.isLocationServiceEnabled();
+      if (!mounted) return;
+      if (!serviceOn) {
+        setState(() => _locationProblem = LocationBannerState.serviceOff);
+        return;
+      }
+
+      final LocationPermission permission = await Geolocator.checkPermission();
+      if (!mounted) return;
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _locationProblem = LocationBannerState.deniedForever);
+        return;
+      }
+      if (permission == LocationPermission.denied) {
+        setState(() => _locationProblem = LocationBannerState.denied);
+        return;
+      }
+
+      setState(() => _locationProblem = null);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _locationProblem = LocationBannerState.error);
+      }
+    }
+  }
+
+  // Dipicu dari banner "Coba Lagi": minta ViewModel init ulang + refresh status.
+  Future<void> _retryLocation() async {
+    context.read<MapViewModel>().initLocation();
+    await _refreshLocationState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshLocationState();
+    }
   }
 
   Future<Map<String, dynamic>?>? _getCustomerProfile(String customerId) {
@@ -269,7 +325,7 @@ class _MapDriverScreenState extends State<MapDriverScreen>
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: Color(0xFFF7F9FC));
             },
           ),
@@ -373,14 +429,9 @@ class _MapDriverScreenState extends State<MapDriverScreen>
               ],
             ),
           ),
-          IconButton(
-            onPressed: () => _openChat(order),
-            icon: const Icon(
-              Icons.chat_bubble_outline_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
-          ),
+          // Tombol chat tunggal ada di panel info customer (lihat _buildDeliveryPanel).
+          // SizedBox penyeimbang supaya judul tetap ter-center terhadap tombol back.
+          const SizedBox(width: 48),
         ],
       ),
     );
@@ -484,7 +535,61 @@ class _MapDriverScreenState extends State<MapDriverScreen>
               child: const Icon(Icons.my_location_rounded),
             ),
           ),
+        if (_locationProblem != null)
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: LocationStatusBanner(
+              state: _locationProblem!,
+              onRetry: _retryLocation,
+              margin: EdgeInsets.zero,
+            ),
+          )
+        else if (currentLocation == null)
+          Positioned(
+            top: 12,
+            left: 0,
+            right: 0,
+            child: Center(child: _buildSearchingChip()),
+          ),
       ],
+    );
+  }
+
+  Widget _buildSearchingChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: _primaryBlue),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Mencari lokasi...',
+            style: GoogleFonts.inter(
+              color: _textDark,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -543,7 +648,7 @@ class _MapDriverScreenState extends State<MapDriverScreen>
                         : Image.network(
                             customerPhoto,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) {
+                            errorBuilder: (_, _, _) {
                               return const Icon(
                                 Icons.person_rounded,
                                 color: _primaryBlue,
@@ -648,6 +753,30 @@ class _MapDriverScreenState extends State<MapDriverScreen>
           if (_base64Photo.isNotEmpty) ...[
             const SizedBox(height: 11),
             _buildPhotoPreview(),
+          ],
+          if (viewModel.currentLocation == null) ...[
+            const SizedBox(height: 11),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _locationProblem != null
+                      ? Icons.gps_off_rounded
+                      : Icons.location_searching_rounded,
+                  size: 15,
+                  color: _textGrey,
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    _locationProblem != null
+                        ? 'Aktifkan lokasi untuk melanjutkan.'
+                        : 'Menunggu lokasi GPS...',
+                    style: GoogleFonts.inter(color: _textGrey, fontSize: 11.5),
+                  ),
+                ),
+              ],
+            ),
           ],
           const SizedBox(height: 13),
           SizedBox(

@@ -1,576 +1,384 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/app_assets.dart';
 import '../../viewmodels/admin_viewmodel.dart';
+import 'admin_bottom_bar.dart';
 
 class AdminOrderDetailScreen extends StatelessWidget {
   final String orderId;
 
-  const AdminOrderDetailScreen({
-    super.key,
-    required this.orderId,
-  });
+  const AdminOrderDetailScreen({super.key, required this.orderId});
 
-  String _formatDistance(dynamic value) {
-    final number = double.tryParse(value.toString()) ?? 0;
-    return '${number.toStringAsFixed(2)} km';
-  }
-
-  String _formatCurrency(dynamic value) {
-    final number = double.tryParse(value.toString()) ?? 0;
-    final raw = number.round().toString();
-
-    final buffer = StringBuffer();
-
-    for (int i = 0; i < raw.length; i++) {
-      final remaining = raw.length - i;
-      buffer.write(raw[i]);
-
-      if (remaining > 1 && remaining % 3 == 1) {
-        buffer.write('.');
-      }
-    }
-
-    return 'Rp. $buffer';
-  }
+  static const Color _primaryBlue = Color(0xFF133D87);
+  static const Color _titleBlue = Color(0xFF608BC0);
+  static const Color _textDark = Color(0xFF202832);
+  static const Color _textGrey = Color(0xFF8A929C);
+  static const Color _borderColor = Color(0xFFD8E4F0);
+  static const Color _pageBackground = Color(0xFFF8FAFD);
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AdminViewModel>();
+    final AdminViewModel admin = context.read<AdminViewModel>();
 
     return Scaffold(
+      backgroundColor: _pageBackground,
       extendBody: true,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: Image.asset(
-              AppAssets.loginBackground,
-              fit: BoxFit.cover,
-            ),
+          Image.asset(
+            AppAssets.loginBackground,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return const ColoredBox(color: _pageBackground);
+            },
           ),
           SafeArea(
             bottom: false,
             child: Column(
               children: [
-                const SizedBox(height: 16),
-                SvgPicture.asset(
-                  AppAssets.logo,
-                  width: 214,
-                ),
-                const SizedBox(height: 26),
+                const SizedBox(height: 17),
+                SvgPicture.asset(AppAssets.logo, width: 218),
+                const SizedBox(height: 24),
                 Expanded(
                   child: Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.fromLTRB(22, 0, 22, 90),
-                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-                    clipBehavior: Clip.antiAlias,
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
+                        top: Radius.circular(30),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 18,
+                          color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 20,
                           offset: const Offset(0, 5),
                         ),
                       ],
                     ),
-                    child: StreamBuilder(
-                      stream: admin.watchOrderDetail(orderId),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(30),
+                      ),
+                      child:
+                          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: admin.watchOrderDetail(orderId),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasError) {
+                                return _buildMessage(
+                                  icon: Icons.error_outline_rounded,
+                                  text: 'Gagal memuat detail order.',
+                                );
+                              }
 
-                        if (!snapshot.hasData || !snapshot.data!.exists) {
-                          return const Center(
-                            child: Text('Order tidak ditemukan'),
-                          );
-                        }
+                              if (!snapshot.hasData) {
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    color: _primaryBlue,
+                                  ),
+                                );
+                              }
 
-                        final data = snapshot.data!.data()!;
+                              if (snapshot.data?.exists != true) {
+                                return _buildMessage(
+                                  icon: Icons.inventory_2_outlined,
+                                  text: 'Order tidak ditemukan.',
+                                );
+                              }
 
-                        final status = data['status']?.toString() ?? '-';
-                        final createdAt = data['created_at'];
-                        final customerId =
-                            data['customer_id']?.toString() ?? '';
-                        final driverId = data['driver_id']?.toString() ?? '';
-                        final pickupAddress =
-                            data['pickup_address']?.toString() ?? '-';
-                        final destinationAddress =
-                            data['dest_address']?.toString() ??
-                                data['destination_address']?.toString() ??
-                                '-';
-                        final itemDescription =
-                            data['item_description']?.toString() ?? '-';
-                        final weight =
-                            data['weight_category_name']?.toString() ??
-                                data['weightCategoryName']?.toString() ??
-                                '-';
+                              final Map<String, dynamic> data =
+                                  snapshot.data!.data() ?? {};
 
-                        final distanceKm =
-                            _formatDistance(data['distance_km']);
-                        final totalCost =
-                            _formatCurrency(data['total_cost']);
+                              final String customerId =
+                                  data['customer_id']?.toString() ?? '';
 
-                        return Column(
-                          children: [
-                            _header(context),
-                            const SizedBox(height: 20),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  children: [
-                                    _orderHeaderCard(
-                                      orderId: orderId,
-                                      status: admin.statusLabel(status),
-                                      date: admin.formatDate(createdAt),
-                                      time: admin.formatTime(createdAt),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _userCard(
-                                      context: context,
-                                      title: 'Customer',
-                                      userId: customerId,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _addressCard(
-                                      pickupAddress: pickupAddress,
-                                      destinationAddress: destinationAddress,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _userCard(
-                                      context: context,
-                                      title: 'Driver',
-                                      userId: driverId,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _itemInfoCard(
-                                      itemDescription: itemDescription,
-                                      weight: weight,
-                                      distanceKm: distanceKm,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _paymentCard(totalCost: totalCost),
-                                    const SizedBox(height: 24),
-                                  ],
+                              final String driverId =
+                                  data['driver_id']?.toString() ?? '';
+
+                              final String proofValue =
+                                  (data['proof_photo_url'] ??
+                                          data['proof_url'] ??
+                                          data['proof_photo_base64'] ??
+                                          data['delivery_proof'] ??
+                                          '')
+                                      .toString();
+
+                              return ListView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  24,
+                                  25,
+                                  24,
+                                  120,
                                 ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                                children: [
+                                  _buildHeader(context),
+                                  const SizedBox(height: 28),
+
+                                  _CustomerHeaderCard(userId: customerId),
+
+                                  const SizedBox(height: 18),
+
+                                  _buildOrderInformation(
+                                    admin: admin,
+                                    data: data,
+                                  ),
+
+                                  const SizedBox(height: 18),
+
+                                  _buildDeliveryLocation(data),
+
+                                  if (driverId.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 18),
+                                    _DriverInformationCard(driverId: driverId),
+                                  ],
+
+                                  if (proofValue.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 18),
+                                    _buildProofCard(proofValue),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          _bottomNav(),
         ],
       ),
+      bottomNavigationBar: const AdminBottomBar(selectedIndex: 2),
     );
   }
 
-  Widget _header(BuildContext context) {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 24,
-            color: Colors.black,
+  Widget _buildHeader(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 0,
+            child: IconButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Color(0xFF111820),
+                size: 26,
+              ),
+            ),
           ),
-        ),
-        const Expanded(
-          child: Center(
+          Center(
             child: Text(
               'Order Detail',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
+              style: GoogleFonts.inter(
+                color: _textDark,
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 24),
-      ],
-    );
-  }
-
-  Widget _orderHeaderCard({
-    required String orderId,
-    required String status,
-    required String date,
-    required String time,
-  }) {
-    return _card(
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '#$orderId',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  date,
-                  style: const TextStyle(
-                    color: Color(0xFF6F7784),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _statusChip(status),
-              const SizedBox(height: 8),
-              Text(
-                time,
-                style: const TextStyle(
-                  color: Color(0xFF6F7784),
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
 
-  Widget _userCard({
-    required BuildContext context,
-    required String title,
-    required String userId,
+  Widget _buildOrderInformation({
+    required AdminViewModel admin,
+    required Map<String, dynamic> data,
   }) {
-    final admin = context.watch<AdminViewModel>();
+    final String item =
+        data['item_description']?.toString().trim().isNotEmpty == true
+        ? data['item_description'].toString().trim()
+        : 'Paket';
 
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle(title),
-          const SizedBox(height: 14),
-          if (userId.isEmpty)
-            const Text(
-              'Belum ada data',
-              style: TextStyle(color: Color(0xFF6F7784), fontSize: 12),
-            )
-          else
-            StreamBuilder(
-              stream: admin.watchUserDetail(userId),
-              builder: (context, snapshot) {
-                String name = '-';
-                String phone = '-';
-                String photoUrl = '';
+    final String weight =
+        (data['weight_category_name'] ??
+                data['weight_category'] ??
+                data['weight'] ??
+                '-')
+            .toString();
 
-                if (snapshot.hasData && snapshot.data!.exists) {
-                  final userData = snapshot.data!.data()!;
-                  name = userData['name']?.toString() ?? '-';
-                  phone = userData['phone']?.toString() ?? '-';
-                  photoUrl = userData['photo_url']?.toString() ?? '';
-                }
+    final dynamic distance = data['distance_km'] ?? data['distance'] ?? 0;
 
-                return Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 25,
-                      backgroundColor: const Color(0xFFD6E7F8),
-                      backgroundImage:
-                          photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-                      child: photoUrl.isEmpty
-                          ? const Icon(
-                              Icons.person,
-                              color: Color(0xFF133D87),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            phone,
-                            style: const TextStyle(
-                              color: Color(0xFF6F7784),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      color: Color(0xFF133D87),
-                      size: 25,
-                    ),
-                  ],
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
+    final dynamic totalCost =
+        data['total_cost'] ??
+        data['shipping_cost'] ??
+        data['delivery_fee'] ??
+        data['price'] ??
+        0;
 
-  Widget _addressCard({
-    required String pickupAddress,
-    required String destinationAddress,
-  }) {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('Pickup & Pengantaran'),
-          const Divider(height: 24, color: Color(0xFFE3E8EF)),
-          _addressRow(
-            title: 'Pickup',
-            address: pickupAddress,
-            color: const Color(0xFF0066FF),
-            icon: Icons.radio_button_checked_rounded,
-          ),
-          const Padding(
-            padding: EdgeInsets.only(left: 18),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                height: 22,
-                child: VerticalDivider(
-                  width: 2,
-                  thickness: 1.5,
-                  color: Color(0xFFCAD4E1),
-                ),
-              ),
-            ),
-          ),
-          _addressRow(
-            title: 'Tujuan',
-            address: destinationAddress,
-            color: Color(0xFF0AAA55),
-            icon: Icons.location_on_rounded,
-          ),
-        ],
-      ),
-    );
-  }
+    final String status = data['status']?.toString() ?? '-';
 
-  Widget _itemInfoCard({
-    required String itemDescription,
-    required String weight,
-    required String distanceKm,
-  }) {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('Item Information'),
-          const Divider(height: 24, color: Color(0xFFE3E8EF)),
-          _detailRow('Item', itemDescription),
-          const SizedBox(height: 11),
-          _detailRow('Weight', weight),
-          const SizedBox(height: 11),
-          _detailRow('Distance', distanceKm),
-        ],
-      ),
-    );
-  }
-
-  Widget _paymentCard({
-    required String totalCost,
-  }) {
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionTitle('Payment Details'),
-          const Divider(height: 24, color: Color(0xFFE3E8EF)),
-          _detailRow('Payment Method', 'Cash'),
-          const SizedBox(height: 11),
-          _detailRow('Delivery Fee', totalCost),
-          const Divider(height: 24, color: Color(0xFFE3E8EF)),
-          _detailRow('Total Payment', totalCost, bold: true),
-        ],
-      ),
-    );
-  }
-
-  Widget _addressRow({
-    required String title,
-    required String address,
-    required Color color,
-    required IconData icon,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return _SectionCard(
+      title: 'Order Info',
       children: [
-        Container(
-          width: 37,
-          height: 37,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.10),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                address,
-                style: const TextStyle(
-                  color: Color(0xFF6F7784),
-                  fontSize: 12,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
+        _InfoRow(label: 'Item', value: item),
+        _InfoRow(label: 'Weight', value: weight),
+        _InfoRow(label: 'Distance', value: admin.formatDistanceText(distance)),
+        _InfoRow(label: 'Status', value: admin.statusLabel(status)),
+        _InfoRow(
+          label: 'Total Cost',
+          value: admin.formatCurrency(totalCost),
+          valueColor: _primaryBlue,
+          boldValue: true,
+          bottomPadding: 0,
         ),
       ],
     );
   }
 
-  Widget _detailRow(String label, String value, {bool bold = false}) {
-    return Row(
+  Widget _buildDeliveryLocation(Map<String, dynamic> data) {
+    final String pickupAddress = data['pickup_address']?.toString() ?? '-';
+
+    final String destinationAddress =
+        (data['dest_address'] ?? data['destination_address'] ?? '-').toString();
+
+    return _SectionCard(
+      title: 'Delivery Location',
       children: [
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFF6F7784),
-              fontSize: 12.5,
-            ),
-          ),
+        _LocationRow(
+          icon: Icons.trip_origin_rounded,
+          color: const Color(0xFF20B86B),
+          label: 'Pickup',
+          value: pickupAddress,
         ),
-        const SizedBox(width: 14),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              color: const Color(0xFF1A1D23),
-              fontSize: bold ? 14 : 12.5,
-              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
+        const SizedBox(height: 18),
+        _LocationRow(
+          icon: Icons.location_on_rounded,
+          color: const Color(0xFFE85B5B),
+          label: 'Destination',
+          value: destinationAddress,
         ),
       ],
     );
   }
 
-  Widget _sectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        color: Color(0xFF1A1D23),
-        fontSize: 15,
-        fontWeight: FontWeight.bold,
-      ),
-    );
-  }
-
-  Widget _statusChip(String status) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF3FF),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        status,
-        style: const TextStyle(
-          color: Color(0xFF0066FF),
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+  Widget _buildProofCard(String proofValue) {
+    return _SectionCard(
+      title: 'Proof of Delivery',
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: _buildProofImage(proofValue),
         ),
-      ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 25,
+              height: 25,
+              decoration: const BoxDecoration(
+                color: Color(0xFF20B86B),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.verified_rounded,
+                color: Colors.white,
+                size: 17,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Foto ini diambil oleh driver sebagai bukti bahwa paket telah selesai dikirim.',
+                style: GoogleFonts.inter(
+                  color: _textGrey,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _card({required Widget child}) {
+  Widget _buildProofImage(String value) {
+    final String cleanValue = value.trim();
+
+    if (cleanValue.startsWith('http://') || cleanValue.startsWith('https://')) {
+      return Image.network(
+        cleanValue,
+        width: double.infinity,
+        height: 270,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _proofError();
+        },
+      );
+    }
+
+    try {
+      final String base64Value = cleanValue.contains(',')
+          ? cleanValue.split(',').last
+          : cleanValue;
+
+      final Uint8List bytes = base64Decode(base64Value);
+
+      return Image.memory(
+        bytes,
+        width: double.infinity,
+        height: 270,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _proofError();
+        },
+      );
+    } catch (_) {
+      return _proofError();
+    }
+  }
+
+  Widget _proofError() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: const Color(0xFFC5D8EE)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+      height: 170,
+      color: const Color(0xFFF4F6F9),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.broken_image_outlined, color: _textGrey, size: 40),
+          const SizedBox(height: 8),
+          Text(
+            'Foto bukti tidak dapat dimuat.',
+            style: GoogleFonts.inter(color: _textGrey, fontSize: 12),
           ),
         ],
       ),
-      child: child,
     );
   }
 
-  Widget _bottomNav() {
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        height: 82,
-        decoration: const BoxDecoration(
-          color: Color(0xFF133D87),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(100),
-            topRight: Radius.circular(100),
-          ),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+  Widget _buildMessage({required IconData icon, required String text}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _BottomItem(icon: Icons.home_rounded, label: 'Dashboard'),
-            _BottomItem(icon: Icons.groups_rounded, label: 'Users'),
-            _BottomItem(
-              icon: Icons.inventory_2_rounded,
-              label: 'Orders',
-              active: true,
+            Icon(icon, color: _titleBlue, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(color: _textGrey, fontSize: 14),
             ),
-            _BottomItem(icon: Icons.route_rounded, label: 'Tracking'),
-            _BottomItem(icon: Icons.person_rounded, label: 'Profile'),
           ],
         ),
       ),
@@ -578,37 +386,331 @@ class AdminOrderDetailScreen extends StatelessWidget {
   }
 }
 
-class _BottomItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
+class _CustomerHeaderCard extends StatelessWidget {
+  final String userId;
 
-  const _BottomItem({
-    required this.icon,
-    required this.label,
-    this.active = false,
+  const _CustomerHeaderCard({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    if (userId.trim().isEmpty) {
+      return const _PersonHeaderCard(
+        name: 'Customer tidak tersedia',
+        email: '-',
+        photoUrl: '',
+        trailingIcon: Icons.person_outline_rounded,
+      );
+    }
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            height: 118,
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFF133D87)),
+            ),
+          );
+        }
+
+        final Map<String, dynamic> data = snapshot.data?.data() ?? {};
+
+        final String name = data['name']?.toString().trim().isNotEmpty == true
+            ? data['name'].toString().trim()
+            : 'Customer';
+
+        final String email = data['email']?.toString() ?? '-';
+
+        final String photoUrl = (data['photo_url'] ?? data['photoUrl'] ?? '')
+            .toString();
+
+        return _PersonHeaderCard(
+          name: name,
+          email: email,
+          photoUrl: photoUrl,
+          trailingIcon: Icons.account_circle_outlined,
+        );
+      },
+    );
+  }
+}
+
+class _DriverInformationCard extends StatelessWidget {
+  final String driverId;
+
+  const _DriverInformationCard({required this.driverId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(driverId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            height: 110,
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFF133D87)),
+            ),
+          );
+        }
+
+        final Map<String, dynamic> data = snapshot.data?.data() ?? {};
+
+        final String name = data['name']?.toString() ?? 'Driver';
+
+        final String email = data['email']?.toString() ?? '-';
+
+        final String phone = (data['phone'] ?? data['phone_number'] ?? '-')
+            .toString();
+
+        return _SectionCard(
+          title: 'Driver Information',
+          children: [
+            _InfoRow(label: 'Name', value: name),
+            _InfoRow(label: 'Email', value: email),
+            _InfoRow(label: 'Phone', value: phone, bottomPadding: 0),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PersonHeaderCard extends StatelessWidget {
+  final String name;
+  final String email;
+  final String photoUrl;
+  final IconData trailingIcon;
+
+  const _PersonHeaderCard({
+    required this.name,
+    required this.email,
+    required this.photoUrl,
+    required this.trailingIcon,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? Colors.white : Colors.white.withOpacity(0.6);
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0xFFD8E4F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 2),
+          Container(
+            width: 62,
+            height: 62,
+            clipBehavior: Clip.antiAlias,
+            decoration: const BoxDecoration(
+              color: Color(0xFFDCEEFF),
+              shape: BoxShape.circle,
+            ),
+            child: photoUrl.trim().isEmpty
+                ? const Icon(
+                    Icons.person_rounded,
+                    color: Color(0xFF133D87),
+                    size: 38,
+                  )
+                : Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.person_rounded,
+                        color: Color(0xFF133D87),
+                        size: 38,
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(width: 17),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF202832),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF8A929C),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(trailingIcon, color: const Color(0xFF133D87), size: 34),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _SectionCard({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 21, 20, 22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0xFFD8E4F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
+            title,
+            style: GoogleFonts.inter(
+              color: const Color(0xFF202832),
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 22),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+  final bool boldValue;
+  final double bottomPadding;
+
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.boldValue = false,
+    this.bottomPadding = 18,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomPadding),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 112,
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF8A929C),
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: GoogleFonts.inter(
+                color: valueColor ?? const Color(0xFF333A43),
+                fontSize: 13,
+                fontWeight: boldValue ? FontWeight.w800 : FontWeight.w600,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LocationRow extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String value;
+
+  const _LocationRow({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  color: const Color(0xFF8A929C),
+                  fontSize: 11.5,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                value,
+                style: GoogleFonts.inter(
+                  color: const Color(0xFF333A43),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

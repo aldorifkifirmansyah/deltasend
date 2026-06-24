@@ -264,6 +264,32 @@ Future<void> _logout() async {
     );
   }
 
+  Future<void> _showEditNameDialog(String currentName) async {
+    final String? newName = await showDialog<String>(
+      context: context,
+      builder: (_) => EditNameDialog(initialName: currentName),
+    );
+
+    if (!mounted) return;
+    if (newName == null || newName.isEmpty || newName == currentName) return;
+
+    final auth = context.read<AuthViewModel>();
+    final bool ok = await auth.updateUserName(newName);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Nama berhasil diperbarui'
+              : (auth.errorMessage ?? 'Gagal memperbarui nama'),
+          style: GoogleFonts.inter(),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   void _changeTab(int index) {
     setState(() {
       _selectedIndex = index;

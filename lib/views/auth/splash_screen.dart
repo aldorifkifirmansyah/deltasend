@@ -185,7 +185,7 @@ class _LoadingDots extends StatelessWidget {
               width: 8,
               height: 8,
               decoration: BoxDecoration(
-                color: AppColors.primaryBlue.withOpacity(opacity),
+                color: AppColors.primaryBlue.withValues(alpha: opacity),
                 shape: BoxShape.circle,
               ),
             );

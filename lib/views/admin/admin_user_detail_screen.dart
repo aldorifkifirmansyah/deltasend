@@ -1,264 +1,360 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/app_assets.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 
 class AdminUserDetailScreen extends StatelessWidget {
-  final String userId;
+  final String uid;
 
-  const AdminUserDetailScreen({
-    super.key,
-    required this.userId,
-  });
+  const AdminUserDetailScreen({super.key, required this.uid});
+
+  static const Color _primaryBlue = Color(0xFF133D87);
+  static const Color _titleBlue = Color(0xFF608BC0);
+  static const Color _textDark = Color(0xFF202832);
+  static const Color _textGrey = Color(0xFF8A929C);
+  static const Color _borderColor = Color(0xFFE0E5EB);
+  static const Color _pageBackground = Color(0xFFF8FAFD);
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AdminViewModel>();
+    final AdminViewModel admin = context.read<AdminViewModel>();
 
     return Scaffold(
-      extendBody: true,
+      backgroundColor: _pageBackground,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: Image.asset(
-              AppAssets.loginBackground,
-              fit: BoxFit.cover,
-            ),
+          Image.asset(
+            AppAssets.loginBackground,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return const ColoredBox(color: _pageBackground);
+            },
           ),
           SafeArea(
-            bottom: false,
             child: Column(
               children: [
-                const SizedBox(height: 16),
-                SvgPicture.asset(
-                  AppAssets.logo,
-                  width: 214,
-                ),
-                const SizedBox(height: 26),
+                const SizedBox(height: 17),
+                SvgPicture.asset(AppAssets.logo, width: 218),
+                const SizedBox(height: 24),
                 Expanded(
                   child: Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.fromLTRB(22, 0, 22, 90),
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                    clipBehavior: Clip.antiAlias,
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
+                        top: Radius.circular(30),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.12),
-                          blurRadius: 18,
+                          color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 20,
                           offset: const Offset(0, 5),
                         ),
                       ],
                     ),
-                    child: StreamBuilder(
-                      stream: admin.watchUserDetail(userId),
-                      builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(30),
+                      ),
+                      child:
+                          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                            stream: admin.watchUserDetail(uid),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasError) {
+                                return _buildMessage(
+                                  icon: Icons.error_outline_rounded,
+                                  text: 'Gagal memuat detail user.',
+                                );
+                              }
 
-                        if (!snapshot.hasData || !snapshot.data!.exists) {
-                          return const Center(
-                            child: Text('User tidak ditemukan'),
-                          );
-                        }
+                              if (!snapshot.hasData) {
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    color: _primaryBlue,
+                                  ),
+                                );
+                              }
 
-                        final data = snapshot.data!.data()!;
+                              if (snapshot.data?.exists != true) {
+                                return _buildMessage(
+                                  icon: Icons.person_off_outlined,
+                                  text: 'User tidak ditemukan.',
+                                );
+                              }
 
-                        final name = data['name']?.toString() ?? '-';
-                        final email = data['email']?.toString() ?? '-';
-                        final phone = data['phone']?.toString() ?? '-';
-                        final role = data['role']?.toString() ?? '-';
-                        final ratingAvg =
-                            data['rating_avg']?.toString() ?? '-';
-                        final ratingCount =
-                            data['rating_count']?.toString() ?? '-';
-                        final photoUrl =
-                            data['photo_url']?.toString() ?? '';
-                        final joinedDate =
-                            admin.formatDate(data['created_at']);
+                              final Map<String, dynamic> data =
+                                  snapshot.data!.data() ?? {};
 
-                        return Column(
-                          children: [
-                            _header(context),
-                            const SizedBox(height: 36),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  children: [
-                                    _profileSection(
-                                      name: name,
-                                      email: email,
-                                      phone: phone,
-                                      role: role,
-                                      joinedDate: joinedDate,
-                                      photoUrl: photoUrl,
-                                    ),
-                                    const SizedBox(height: 24),
-                                    _accountInfoCard(
-                                      name: name,
-                                      email: email,
-                                      phone: phone,
-                                      role: role,
-                                      ratingAvg: ratingAvg,
-                                      ratingCount: ratingCount,
-                                      joinedDate: joinedDate,
-                                    ),
-                                    const SizedBox(height: 24),
-                                  ],
+                              final String name =
+                                  data['name']?.toString().trim().isNotEmpty ==
+                                      true
+                                  ? data['name'].toString().trim()
+                                  : 'Tanpa nama';
+
+                              final String email =
+                                  data['email']?.toString() ?? '-';
+
+                              final String role =
+                                  data['role']?.toString() ?? '-';
+
+                              final String phone =
+                                  (data['phone'] ?? data['phone_number'] ?? '-')
+                                      .toString();
+
+                              final String address =
+                                  (data['address'] ?? data['alamat'] ?? '-')
+                                      .toString();
+
+                              final String photoUrl =
+                                  (data['photo_url'] ?? data['photoUrl'] ?? '')
+                                      .toString();
+
+                              final bool isOnline =
+                                  data['is_online'] == true ||
+                                  data['isOnline'] == true;
+
+                              // FIELD RATING YANG DIDUKUNG
+                              final dynamic ratingValue =
+                                  data['rating_avg'] ??
+                                  data['ratingAvg'] ??
+                                  data['rating_average'] ??
+                                  data['average_rating'] ??
+                                  data['rating'] ??
+                                  0;
+
+                              // FIELD JUMLAH RATING YANG DIDUKUNG
+                              final dynamic ratingCountValue =
+                                  data['rating_count'] ??
+                                  data['ratingCount'] ??
+                                  data['total_rating'] ??
+                                  data['jumlah_rating'] ??
+                                  0;
+
+                              final String averageRating = _formatRating(
+                                ratingValue,
+                              );
+
+                              final String ratingCount = _formatRatingCount(
+                                ratingCountValue,
+                              );
+
+                              final String joinedDate = _formatJoinedDate(
+                                data['created_at'] ??
+                                    data['createdAt'] ??
+                                    data['joined_at'] ??
+                                    data['joinedAt'],
+                              );
+
+                              return ListView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  24,
+                                  24,
+                                  24,
+                                  42,
                                 ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
+                                children: [
+                                  _buildTopHeader(context),
+                                  const SizedBox(height: 30),
+                                  _buildProfileHeader(
+                                    name: name,
+                                    email: email,
+                                    phone: phone,
+                                    role: role,
+                                    photoUrl: photoUrl,
+                                    isOnline: isOnline,
+                                    joinedDate: joinedDate,
+                                  ),
+                                  const SizedBox(height: 32),
+                                  _buildAccountInformation(
+                                    name: name,
+                                    email: email,
+                                    phone: phone,
+                                    role: role,
+                                    address: address,
+                                    isOnline: isOnline,
+                                    averageRating: averageRating,
+                                    ratingCount: ratingCount,
+                                    joinedDate: joinedDate,
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          _bottomNav(),
         ],
       ),
     );
   }
 
-  Widget _header(BuildContext context) {
-    return Row(
-      children: [
-        GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 26,
-            color: Colors.black,
-          ),
-        ),
-        const Expanded(
-          child: Center(
-            child: Text(
-              'User Detail',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+  Widget _buildTopHeader(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 0,
+            child: IconButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Color(0xFF111820),
+                size: 26,
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 26),
-      ],
+          Center(
+            child: Text(
+              'User Detail',
+              style: GoogleFonts.inter(
+                color: _textDark,
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _profileSection({
+  Widget _buildProfileHeader({
     required String name,
     required String email,
     required String phone,
     required String role,
-    required String joinedDate,
     required String photoUrl,
+    required bool isOnline,
+    required String joinedDate,
   }) {
+    final bool isDriver = role.trim().toLowerCase() == 'driver';
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          radius: 38,
-          backgroundColor: const Color(0xFFD6E7F8),
-          backgroundImage: photoUrl.isNotEmpty ? NetworkImage(photoUrl) : null,
-          child: photoUrl.isEmpty
-              ? const Icon(
-                  Icons.person,
-                  size: 42,
-                  color: Color(0xFF133D87),
-                )
-              : null,
+        Container(
+          width: 104,
+          height: 104,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: const Color(0xFFDCEEFF),
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFFC8DCEF)),
+          ),
+          child: photoUrl.trim().isEmpty
+              ? const Icon(Icons.person_rounded, size: 58, color: _primaryBlue)
+              : Image.network(
+                  photoUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(
+                      Icons.person_rounded,
+                      size: 58,
+                      color: _primaryBlue,
+                    );
+                  },
+                ),
         ),
-        const SizedBox(width: 18),
+        const SizedBox(width: 20),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: Text(
                       name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        color: _textDark,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFD9FBE2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'Active',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF00A651),
-                        fontWeight: FontWeight.w500,
+                  if (isDriver)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isOnline
+                            ? const Color(0xFFE1F8EB)
+                            : const Color(0xFFFFF2D7),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        isOnline ? 'Online' : 'Offline',
+                        style: GoogleFonts.inter(
+                          color: isOnline
+                              ? const Color(0xFF22A86C)
+                              : const Color(0xFFD69A22),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
+                  horizontal: 12,
+                  vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEAF3FF),
-                  borderRadius: BorderRadius.circular(20),
+                  color: const Color(0xFFEAF4FF),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
-                  role,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF0066FF),
+                  _capitalize(role),
+                  style: GoogleFonts.inter(
+                    color: _titleBlue,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 13),
               Text(
                 email,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF5F6770),
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(color: _textGrey, fontSize: 13),
               ),
               const SizedBox(height: 8),
               Text(
-                phone.isEmpty ? '-' : phone,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF5F6770),
-                ),
+                phone,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(color: _textGrey, fontSize: 13),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 14),
               Text(
                 'Bergabung sejak $joinedDate',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF5F6770),
+                style: GoogleFonts.inter(
+                  color: _textGrey,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -268,102 +364,153 @@ class AdminUserDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _accountInfoCard({
+  Widget _buildAccountInformation({
     required String name,
     required String email,
     required String phone,
     required String role,
-    required String ratingAvg,
+    required String address,
+    required bool isOnline,
+    required String averageRating,
     required String ratingCount,
     required String joinedDate,
   }) {
+    final bool isDriver = role.trim().toLowerCase() == 'driver';
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-        ),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: _borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 7,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Informasi Akun',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+            style: GoogleFonts.inter(
+              color: _textDark,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 18),
-          _infoRow('Nama', name),
-          _infoRow('Email', email),
-          _infoRow('Nomor Telepon', phone.isEmpty ? '-' : phone),
-          _infoRow('Role', role),
-          _infoRow('Rating Rata-rata', ratingAvg),
-          _infoRow('Jumlah Rating', ratingCount),
-          _infoRow('Tanggal Bergabung', joinedDate),
-        ],
-      ),
-    );
-  }
-
-  Widget _infoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 22),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF5F6770),
-              ),
+          const SizedBox(height: 25),
+          _InformationRow(label: 'Nama', value: name),
+          _InformationRow(label: 'Email', value: email),
+          _InformationRow(label: 'Nomor Telepon', value: phone),
+          _InformationRow(label: 'Role', value: _capitalize(role)),
+          _InformationRow(label: 'Alamat', value: address),
+          if (isDriver) ...[
+            _InformationRow(
+              label: 'Status Terakhir',
+              value: isOnline ? 'Online' : 'Offline',
+              valueColor: isOnline
+                  ? const Color(0xFF22A86C)
+                  : const Color(0xFFD69A22),
             ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF5F6770),
-              ),
+            _InformationRow(
+              label: 'Rating Rata-rata',
+              value: averageRating,
+              valueColor: averageRating == '-'
+                  ? _textGrey
+                  : const Color(0xFFFFA800),
             ),
+            _InformationRow(label: 'Jumlah Rating', value: ratingCount),
+          ],
+          _InformationRow(
+            label: 'Tanggal Bergabung',
+            value: joinedDate,
+            bottomPadding: 0,
           ),
         ],
       ),
     );
   }
 
-  Widget _bottomNav() {
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        height: 82,
-        decoration: const BoxDecoration(
-          color: Color(0xFF133D87),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(100),
-            topRight: Radius.circular(100),
-          ),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
+  String _formatJoinedDate(dynamic value) {
+    DateTime? date;
+
+    if (value is Timestamp) {
+      date = value.toDate();
+    } else if (value is DateTime) {
+      date = value;
+    } else if (value is String) {
+      date = DateTime.tryParse(value);
+    }
+
+    if (date == null) {
+      return '-';
+    }
+
+    const List<String> months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'Mei',
+      'Jun',
+      'Jul',
+      'Agu',
+      'Sep',
+      'Okt',
+      'Nov',
+      'Des',
+    ];
+
+    final String day = date.day.toString().padLeft(2, '0');
+
+    return '$day ${months[date.month - 1]} ${date.year}';
+  }
+
+  String _formatRating(dynamic value) {
+    final double rating = double.tryParse(value?.toString() ?? '') ?? 0.0;
+
+    if (rating <= 0) {
+      return '-';
+    }
+
+    return rating.toStringAsFixed(1);
+  }
+
+  String _formatRatingCount(dynamic value) {
+    final int count = int.tryParse(value?.toString() ?? '') ?? 0;
+
+    return count.toString();
+  }
+
+  String _capitalize(String value) {
+    final String clean = value.trim();
+
+    if (clean.isEmpty) {
+      return '-';
+    }
+
+    return '${clean[0].toUpperCase()}'
+        '${clean.substring(1).toLowerCase()}';
+  }
+
+  Widget _buildMessage({required IconData icon, required String text}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _BottomItem(icon: Icons.home_rounded, label: 'Dashboard'),
-            _BottomItem(
-              icon: Icons.groups_rounded,
-              label: 'Users',
-              active: true,
+            Icon(icon, color: _titleBlue, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(color: _textGrey, fontSize: 14),
             ),
-            _BottomItem(icon: Icons.inventory_2_rounded, label: 'Orders'),
-            _BottomItem(icon: Icons.route_rounded, label: 'Tracking'),
-            _BottomItem(icon: Icons.person_rounded, label: 'Profile'),
           ],
         ),
       ),
@@ -371,33 +518,46 @@ class AdminUserDetailScreen extends StatelessWidget {
   }
 }
 
-class _BottomItem extends StatelessWidget {
-  final IconData icon;
+class _InformationRow extends StatelessWidget {
   final String label;
-  final bool active;
+  final String value;
+  final Color? valueColor;
+  final double bottomPadding;
 
-  const _BottomItem({
-    required this.icon,
+  const _InformationRow({
     required this.label,
-    this.active = false,
+    required this.value,
+    this.valueColor,
+    this.bottomPadding = 21,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? Colors.white : Colors.white.withOpacity(0.6);
-
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      padding: EdgeInsets.only(bottom: bottomPadding),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
+          SizedBox(
+            width: 132,
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF8A929C),
+                fontSize: 12.5,
+                height: 1.35,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.inter(
+                color: valueColor ?? const Color(0xFF6F7781),
+                fontSize: 12.5,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],

@@ -1,30 +1,36 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore;
 
-  // ================= DASHBOARD =================
+  AdminService({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  Future<int> getTotalOrders() async {
-    final snapshot = await _firestore.collection('orders').get();
-    return snapshot.docs.length;
+  // ============================================================
+  // DASHBOARD
+  // ============================================================
+
+  Stream<int> watchTotalOrders() {
+    return _firestore
+        .collection('orders')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 
-  Future<int> getActiveDrivers() async {
-    final snapshot = await _firestore
+  Stream<int> watchActiveDrivers() {
+    return _firestore
         .collection('driver_locations')
         .where('is_online', isEqualTo: true)
-        .get();
-
-    return snapshot.docs.length;
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 
-  Future<int> getOngoingOrders() async {
-    final snapshot = await _firestore
+  Stream<int> watchOngoingOrders() {
+    return _firestore
         .collection('orders')
         .where(
           'status',
-          whereIn: [
+          whereIn: const [
             'pending',
             'accepted',
             'pickingUp',
@@ -32,21 +38,31 @@ class AdminService {
             'onDelivery',
           ],
         )
-        .get();
-
-    return snapshot.docs.length;
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 
-  Future<int> getCompletedOrders() async {
-    final snapshot = await _firestore
+  Stream<int> watchCompletedOrders() {
+    return _firestore
         .collection('orders')
         .where('status', isEqualTo: 'completed')
-        .get();
-
-    return snapshot.docs.length;
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length);
   }
 
-  // ================= USERS =================
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchRecentOrders({
+    int limit = 4,
+  }) {
+    return _firestore
+        .collection('orders')
+        .orderBy('created_at', descending: true)
+        .limit(limit)
+        .snapshots();
+  }
+
+  // ============================================================
+  // USERS
+  // ============================================================
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchUsersByRole(String role) {
     return _firestore
@@ -59,15 +75,17 @@ class AdminService {
     return _firestore.collection('users').doc(uid).snapshots();
   }
 
-  Future<QuerySnapshot<Map<String, dynamic>>> getUsersByRole(String role) async {
+  Future<QuerySnapshot<Map<String, dynamic>>> getUsersByRole(String role) {
     return _firestore.collection('users').where('role', isEqualTo: role).get();
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getUserById(String uid) async {
+  Future<DocumentSnapshot<Map<String, dynamic>>> getUserById(String uid) {
     return _firestore.collection('users').doc(uid).get();
   }
 
-  // ================= ORDERS =================
+  // ============================================================
+  // ORDERS
+  // ============================================================
 
   Stream<QuerySnapshot<Map<String, dynamic>>> watchAllOrders() {
     return _firestore
@@ -76,20 +94,20 @@ class AdminService {
         .snapshots();
   }
 
-  Stream<DocumentSnapshot<Map<String, dynamic>>> watchOrderById(String orderId) {
+  Stream<DocumentSnapshot<Map<String, dynamic>>> watchOrderById(
+    String orderId,
+  ) {
     return _firestore.collection('orders').doc(orderId).snapshots();
   }
 
-  Future<QuerySnapshot<Map<String, dynamic>>> getAllOrders() async {
+  Future<QuerySnapshot<Map<String, dynamic>>> getAllOrders() {
     return _firestore
         .collection('orders')
         .orderBy('created_at', descending: true)
         .get();
   }
 
-  Future<QuerySnapshot<Map<String, dynamic>>> getOrdersByStatus(
-    String status,
-  ) async {
+  Future<QuerySnapshot<Map<String, dynamic>>> getOrdersByStatus(String status) {
     return _firestore
         .collection('orders')
         .where('status', isEqualTo: status)
@@ -97,30 +115,26 @@ class AdminService {
         .get();
   }
 
-  Future<DocumentSnapshot<Map<String, dynamic>>> getOrderById(
-    String orderId,
-  ) async {
+  Future<DocumentSnapshot<Map<String, dynamic>>> getOrderById(String orderId) {
     return _firestore.collection('orders').doc(orderId).get();
   }
 
-  // ================= TRACKING =================
+  // ============================================================
+  // TRACKING
+  // ============================================================
 
-  Stream<DocumentSnapshot<Map<String, dynamic>>> getDriverLocationStream(
+  Stream<DocumentSnapshot<Map<String, dynamic>>> watchDriverLocation(
     String driverId,
   ) {
     return _firestore.collection('driver_locations').doc(driverId).snapshots();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> getActiveOrdersStream() {
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchActiveOrders() {
     return _firestore
         .collection('orders')
         .where(
           'status',
-          whereIn: [
-            'pickingUp',
-            'delivering',
-            'onDelivery',
-          ],
+          whereIn: const ['pickingUp', 'delivering', 'onDelivery'],
         )
         .snapshots();
   }

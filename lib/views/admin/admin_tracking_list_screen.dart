@@ -1,441 +1,747 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../utils/app_assets.dart';
 import '../../viewmodels/admin_viewmodel.dart';
-
-import 'admin_home_screen.dart';
-import 'admin_users_screen.dart';
-import 'admin_order_list_screen.dart';
-import 'admin_profile_screen.dart';
+import 'admin_bottom_bar.dart';
 import 'admin_tracking_detail_screen.dart';
 
-class AdminTrackingListScreen extends StatelessWidget {
+class AdminTrackingListScreen extends StatefulWidget {
   const AdminTrackingListScreen({super.key});
 
-  void _goTo(BuildContext context, Widget page) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => page),
-    );
+  @override
+  State<AdminTrackingListScreen> createState() =>
+      _AdminTrackingListScreenState();
+}
+
+class _AdminTrackingListScreenState extends State<AdminTrackingListScreen> {
+  final TextEditingController _searchController = TextEditingController();
+
+  final FocusNode _searchFocusNode = FocusNode();
+
+  String _selectedFilter = 'all';
+  String _searchQuery = '';
+
+  static const Color _primaryBlue = Color(0xFF133D87);
+  static const Color _titleBlue = Color(0xFF608BC0);
+  static const Color _textDark = Color(0xFF202832);
+  static const Color _textGrey = Color(0xFF858E99);
+  static const Color _borderColor = Color(0xFFE0E5EA);
+  static const Color _pageBackground = Color(0xFFF8FAFD);
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  String _normalizeStatus(String status) {
+    return status.trim().replaceAll('_', '').replaceAll(' ', '').toLowerCase();
+  }
+
+  bool _isOnDelivery(String status) {
+    final String normalized = _normalizeStatus(status);
+
+    return normalized == 'accepted' ||
+        normalized == 'pickingup' ||
+        normalized == 'delivering' ||
+        normalized == 'ondelivery';
+  }
+
+  bool _isCompleted(String status) {
+    return _normalizeStatus(status) == 'completed';
+  }
+
+  bool _matchesFilter(String status) {
+    switch (_selectedFilter) {
+      case 'onDelivery':
+        return _isOnDelivery(status);
+
+      case 'completed':
+        return _isCompleted(status);
+
+      default:
+        return _isOnDelivery(status) || _isCompleted(status);
+    }
+  }
+
+  bool _matchesSearch(String orderId, Map<String, dynamic> data) {
+    if (_searchQuery.isEmpty) {
+      return true;
+    }
+
+    final String item =
+        data['item_description']?.toString().toLowerCase() ?? '';
+
+    final String pickup =
+        data['pickup_address']?.toString().toLowerCase() ?? '';
+
+    final String destination =
+        (data['dest_address'] ?? data['destination_address'] ?? '')
+            .toString()
+            .toLowerCase();
+
+    return orderId.toLowerCase().contains(_searchQuery) ||
+        item.contains(_searchQuery) ||
+        pickup.contains(_searchQuery) ||
+        destination.contains(_searchQuery);
+  }
+
+  Color _statusTextColor(String status) {
+    if (_isCompleted(status)) {
+      return const Color(0xFF24A96B);
+    }
+
+    if (_isOnDelivery(status)) {
+      return const Color(0xFF3E7FC7);
+    }
+
+    return _textGrey;
+  }
+
+  Color _statusBackgroundColor(String status) {
+    if (_isCompleted(status)) {
+      return const Color(0xFFE1F8EB);
+    }
+
+    if (_isOnDelivery(status)) {
+      return const Color(0xFFE6F1FF);
+    }
+
+    return const Color(0xFFF1F3F5);
   }
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AdminViewModel>();
+    final AdminViewModel admin = context.watch<AdminViewModel>();
 
     return Scaffold(
+      backgroundColor: _pageBackground,
+      extendBody: true,
       body: Stack(
+        fit: StackFit.expand,
         children: [
-          Positioned.fill(
-            child: Image.asset(
-              AppAssets.loginBackground,
-              fit: BoxFit.cover,
-            ),
+          Image.asset(
+            AppAssets.loginBackground,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return const ColoredBox(color: _pageBackground);
+            },
           ),
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 20, 22, 0),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(26, 20, 26, 95),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(26),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.12),
-                      blurRadius: 18,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    const Row(
-                      children: [
-                        Spacer(),
-                        Text(
-                          'Tracking',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Spacer(),
-                        Icon(Icons.search, size: 28),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF2F3F5),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: TextField(
-                        onChanged: admin.changeOrderSearchQuery,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          icon: Icon(
-                            Icons.search,
-                            color: Color(0xFF9AA6B2),
-                          ),
-                          hintText: 'Search order...',
-                          hintStyle: TextStyle(
-                            color: Color(0xFF9AA6B2),
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    Row(
-                      children: [
-                        _filterButton(admin, 'All', 'all'),
-                        const SizedBox(width: 10),
-                        _filterButton(admin, 'On Delivery', 'onDelivery'),
-                        const SizedBox(width: 10),
-                        _filterButton(admin, 'Completed', 'completed'),
-                      ],
-                    ),
-
-                    const SizedBox(height: 18),
-
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFFE5E7EB),
-                          ),
-                        ),
-                        child: StreamBuilder(
-                          stream: admin.watchOrders(),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState ==
-                                ConnectionState.waiting) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-
-                            if (!snapshot.hasData ||
-                                snapshot.data!.docs.isEmpty) {
-                              return const Center(
-                                child: Text('Belum ada tracking order'),
-                              );
-                            }
-
-                            final orders = snapshot.data!.docs.where((doc) {
-                              final data = doc.data();
-                              final status = data['status']?.toString() ?? '';
-
-                              return admin.isOrderMatchStatus(status) &&
-                                  admin.isOrderMatchSearch(doc.id, data);
-                            }).toList();
-
-                            if (orders.isEmpty) {
-                              return const Center(
-                                child: Text('Tracking tidak ditemukan'),
-                              );
-                            }
-
-                            return ListView.separated(
-                              itemCount: orders.length,
-                              separatorBuilder: (_, __) => const Divider(
-                                height: 22,
-                                color: Color(0xFFE5E7EB),
-                              ),
-                              itemBuilder: (context, index) {
-                                final doc = orders[index];
-                                final data = doc.data();
-
-                                final status =
-                                    data['status']?.toString() ?? '-';
-
-                                final pickup =
-                                    data['pickup_address']?.toString() ?? '-';
-
-                                final destination =
-                                    data['dest_address']?.toString() ??
-                                        data['destination_address']
-                                            ?.toString() ??
-                                        '-';
-
-                                final item =
-                                    data['item_description']?.toString();
-
-                                final description =
-                                    item == null || item.isEmpty
-                                        ? '$pickup\n$destination'
-                                        : item;
-
-                                return InkWell(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) =>
-                                            AdminTrackingDetailScreen(
-                                          orderId: doc.id,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: _trackingItem(
-                                    orderId: doc.id,
-                                    description: description,
-                                    status: admin.statusLabel(status),
-                                    time: admin.formatTime(data['created_at']),
-                                  ),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          _bottomNav(context),
-        ],
-      ),
-    );
-  }
-
-  Widget _filterButton(
-    AdminViewModel admin,
-    String label,
-    String value,
-  ) {
-    final isActive = admin.selectedOrderStatus == value;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => admin.changeOrderStatus(value),
-        child: Container(
-          height: 44,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isActive ? const Color(0xFFEAF3FF) : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isActive
-                  ? const Color(0xFF133D87)
-                  : const Color(0xFFF0F0F0),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: isActive
-                  ? const Color(0xFF133D87)
-                  : const Color(0xFF5F6770),
-              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _trackingItem({
-    required String orderId,
-    required String description,
-    required String status,
-    required String time,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 118,
-            height: 100,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF2F3F5),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                AppAssets.loginBackground,
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+            bottom: false,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '#$orderId',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  description,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.2,
-                    color: Color(0xFF5F6770),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
+                const SizedBox(height: 17),
+                SvgPicture.asset(AppAssets.logo, width: 218),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(30),
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEAF3FF),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        status,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF0066FF),
-                          fontWeight: FontWeight.w600,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.10),
+                          blurRadius: 20,
+                          offset: const Offset(0, 5),
                         ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(30),
+                      ),
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(22, 31, 22, 120),
+                        children: [
+                          _buildHeader(),
+                          const SizedBox(height: 30),
+                          _buildSearchField(),
+                          const SizedBox(height: 22),
+                          _buildFilters(),
+                          const SizedBox(height: 22),
+                          _buildTrackingList(admin),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      time,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF5F6770),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
           ),
-          const Icon(
-            Icons.chevron_right,
-            size: 34,
-            color: Color(0xFF9AA6B2),
+        ],
+      ),
+      bottomNavigationBar: const AdminBottomBar(selectedIndex: 3),
+    );
+  }
+
+  Widget _buildHeader() {
+    return SizedBox(
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Center(
+            child: Text(
+              'Tracking',
+              style: GoogleFonts.inter(
+                color: _textDark,
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            child: IconButton(
+              onPressed: () {
+                _searchFocusNode.requestFocus();
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+              icon: const Icon(
+                Icons.search_rounded,
+                color: Color(0xFF111820),
+                size: 33,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _bottomNav(BuildContext context) {
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: Container(
-        height: 82,
-        decoration: const BoxDecoration(
-          color: Color(0xFF133D87),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(100),
-            topRight: Radius.circular(100),
+  Widget _buildSearchField() {
+    return TextField(
+      controller: _searchController,
+      focusNode: _searchFocusNode,
+      onChanged: (value) {
+        setState(() {
+          _searchQuery = value.trim().toLowerCase();
+        });
+      },
+      style: GoogleFonts.inter(color: _textDark, fontSize: 13),
+      decoration: InputDecoration(
+        hintText: 'Search order, item, or address...',
+        hintStyle: GoogleFonts.inter(
+          color: const Color(0xFFB2BAC5),
+          fontSize: 13,
+        ),
+        prefixIcon: const Icon(
+          Icons.search_rounded,
+          color: Color(0xFF9BA6B1),
+          size: 25,
+        ),
+        suffixIcon: _searchController.text.isEmpty
+            ? null
+            : IconButton(
+                onPressed: () {
+                  _searchController.clear();
+
+                  setState(() {
+                    _searchQuery = '';
+                  });
+                },
+                icon: const Icon(Icons.close_rounded, color: _textGrey),
+              ),
+        filled: true,
+        fillColor: const Color(0xFFF3F6F8),
+        contentPadding: const EdgeInsets.symmetric(vertical: 19),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: _titleBlue, width: 1.2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilters() {
+    return Row(
+      children: [
+        Expanded(
+          child: _FilterButton(
+            label: 'All',
+            selected: _selectedFilter == 'all',
+            onTap: () {
+              setState(() {
+                _selectedFilter = 'all';
+              });
+            },
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _BottomItem(
-              icon: Icons.home_rounded,
-              label: 'Dashboard',
-              onTap: () => _goTo(context, const AdminHomeScreen()),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _FilterButton(
+            label: 'On Delivery',
+            selected: _selectedFilter == 'onDelivery',
+            onTap: () {
+              setState(() {
+                _selectedFilter = 'onDelivery';
+              });
+            },
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _FilterButton(
+            label: 'Completed',
+            selected: _selectedFilter == 'completed',
+            onTap: () {
+              setState(() {
+                _selectedFilter = 'completed';
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrackingList(AdminViewModel admin) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: admin.watchOrders(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildMessage(
+            icon: Icons.error_outline_rounded,
+            text: 'Gagal memuat data tracking.',
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(40),
+            child: Center(
+              child: CircularProgressIndicator(color: _primaryBlue),
             ),
-            _BottomItem(
-              icon: Icons.groups_rounded,
-              label: 'Users',
-              onTap: () => _goTo(context, const AdminUsersScreen()),
+          );
+        }
+
+        final orders = snapshot.data!.docs.where((document) {
+          final data = document.data();
+          final status = data['status']?.toString() ?? '';
+
+          return _matchesFilter(status) && _matchesSearch(document.id, data);
+        }).toList();
+
+        if (orders.isEmpty) {
+          return _buildMessage(
+            icon: Icons.route_outlined,
+            text: 'Data tracking tidak ditemukan.',
+          );
+        }
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(19),
+            border: Border.all(color: _borderColor),
+          ),
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: orders.length,
+            separatorBuilder: (context, index) {
+              return const Divider(height: 18, color: Color(0xFFE9EDF1));
+            },
+            itemBuilder: (context, index) {
+              final document = orders[index];
+              final data = document.data();
+
+              return _TrackingListItem(
+                orderId: document.id,
+                data: data,
+                admin: admin,
+                toDouble: _toDouble,
+                statusTextColor: _statusTextColor,
+                statusBackgroundColor: _statusBackgroundColor,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMessage({required IconData icon, required String text}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 38, horizontal: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFD),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: _titleBlue, size: 42),
+          const SizedBox(height: 12),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(color: _textGrey, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrackingListItem extends StatelessWidget {
+  final String orderId;
+  final Map<String, dynamic> data;
+  final AdminViewModel admin;
+  final double? Function(dynamic value) toDouble;
+  final Color Function(String status) statusTextColor;
+  final Color Function(String status) statusBackgroundColor;
+
+  const _TrackingListItem({
+    required this.orderId,
+    required this.data,
+    required this.admin,
+    required this.toDouble,
+    required this.statusTextColor,
+    required this.statusBackgroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final String driverId = data['driver_id']?.toString() ?? '';
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: driverId.isEmpty
+          ? null
+          : FirebaseFirestore.instance
+                .collection('driver_locations')
+                .doc(driverId)
+                .snapshots(),
+      builder: (context, locationSnapshot) {
+        final driverLocation = locationSnapshot.data?.data() ?? {};
+
+        final double? driverLat = toDouble(
+          driverLocation['latitude'] ??
+              driverLocation['lat'] ??
+              data['driver_lat'],
+        );
+
+        final double? driverLng = toDouble(
+          driverLocation['longitude'] ??
+              driverLocation['lng'] ??
+              data['driver_lng'],
+        );
+
+        final double? pickupLat = toDouble(data['pickup_lat']);
+
+        final double? pickupLng = toDouble(data['pickup_lng']);
+
+        final double? destinationLat = toDouble(
+          data['dest_lat'] ?? data['destination_lat'],
+        );
+
+        final double? destinationLng = toDouble(
+          data['dest_lng'] ?? data['destination_lng'],
+        );
+
+        final bool hasDriver = driverLat != null && driverLng != null;
+
+        final bool hasPickup = pickupLat != null && pickupLng != null;
+
+        final bool hasDestination =
+            destinationLat != null && destinationLng != null;
+
+        final LatLng center = hasDriver
+            ? LatLng(driverLat, driverLng)
+            : hasDestination
+            ? LatLng(destinationLat, destinationLng)
+            : hasPickup
+            ? LatLng(pickupLat, pickupLng)
+            : const LatLng(-8.1680, 113.7020);
+
+        final List<LatLng> routePoints = [
+          if (hasPickup) LatLng(pickupLat, pickupLng),
+          if (hasDriver) LatLng(driverLat, driverLng),
+          if (hasDestination) LatLng(destinationLat, destinationLng),
+        ];
+
+        final String status = data['status']?.toString() ?? '';
+
+        final String item =
+            data['item_description']?.toString().trim().isNotEmpty == true
+            ? data['item_description'].toString().trim()
+            : 'Paket';
+
+        final String shortId = orderId.length > 8
+            ? orderId.substring(0, 8).toUpperCase()
+            : orderId.toUpperCase();
+
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => AdminTrackingDetailScreen(orderId: orderId),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
+              child: Row(
+                children: [
+                  Container(
+                    width: 145,
+                    height: 104,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAF0F5),
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                    child: IgnorePointer(
+                      child: FlutterMap(
+                        options: MapOptions(
+                          initialCenter: center,
+                          initialZoom: 13.5,
+                          interactionOptions: const InteractionOptions(
+                            flags: InteractiveFlag.none,
+                          ),
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.deltasend',
+                          ),
+                          if (routePoints.length >= 2)
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: routePoints,
+                                  strokeWidth: 4,
+                                  color: const Color(0xFF3C86D1),
+                                ),
+                              ],
+                            ),
+                          MarkerLayer(
+                            markers: [
+                              if (hasPickup)
+                                Marker(
+                                  point: LatLng(pickupLat, pickupLng),
+                                  width: 34,
+                                  height: 34,
+                                  child: const _MiniMarker(
+                                    color: Color(0xFF20B86B),
+                                    icon: Icons.location_on_rounded,
+                                  ),
+                                ),
+                              if (hasDriver)
+                                Marker(
+                                  point: LatLng(driverLat, driverLng),
+                                  width: 38,
+                                  height: 38,
+                                  child: const _MiniMarker(
+                                    color: Color(0xFF133D87),
+                                    icon: Icons.delivery_dining_rounded,
+                                  ),
+                                ),
+                              if (hasDestination)
+                                Marker(
+                                  point: LatLng(destinationLat, destinationLng),
+                                  width: 36,
+                                  height: 36,
+                                  child: const _MiniMarker(
+                                    color: Color(0xFFE85B5B),
+                                    icon: Icons.location_on_rounded,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '#ORD-$shortId',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF202832),
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(
+                          item,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF858E99),
+                            fontSize: 12.5,
+                          ),
+                        ),
+                        const SizedBox(height: 11),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusBackgroundColor(status),
+                                  borderRadius: BorderRadius.circular(13),
+                                ),
+                                child: Text(
+                                  admin.statusLabel(status),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    color: statusTextColor(status),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 9),
+                            Text(
+                              admin.formatTime(data['created_at']),
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFF858E99),
+                                fontSize: 10.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: Color(0xFFAAB3BC),
+                    size: 27,
+                  ),
+                ],
+              ),
             ),
-            _BottomItem(
-              icon: Icons.inventory_2_rounded,
-              label: 'Orders',
-              onTap: () => _goTo(context, const AdminOrdersScreen()),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FilterButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FilterButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 170),
+          height: 51,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFEFF5FF) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF5279A7)
+                  : const Color(0xFFE5E9EE),
+              width: selected ? 1.5 : 1,
             ),
-            const _BottomItem(
-              icon: Icons.route_rounded,
-              label: 'Tracking',
-              active: true,
+            boxShadow: selected
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.025),
+                      blurRadius: 5,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              color: selected
+                  ? const Color(0xFF224A7A)
+                  : const Color(0xFF737C87),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
-            _BottomItem(
-              icon: Icons.person_rounded,
-              label: 'Profile',
-              onTap: () => _goTo(context, AdminProfileScreen()),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _BottomItem extends StatelessWidget {
+class _MiniMarker extends StatelessWidget {
+  final Color color;
   final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback? onTap;
 
-  const _BottomItem({
-    required this.icon,
-    required this.label,
-    this.active = false,
-    this.onTap,
-  });
+  const _MiniMarker({required this.color, required this.icon});
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? Colors.white : Colors.white.withOpacity(0.6);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Padding(
-        padding: const EdgeInsets.only(top: 12, left: 8, right: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-              ),
-            ),
-          ],
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 5),
+        ],
       ),
+      child: Icon(icon, color: Colors.white, size: 19),
     );
   }
 }

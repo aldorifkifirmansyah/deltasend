@@ -153,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: Color(0xFFF7F9FC));
             },
           ),
@@ -319,11 +319,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      SvgPicture.asset(
-                                        AppAssets.googleIcon,
-                                        width: 23,
-                                        height: 23,
-                                        fit: BoxFit.contain,
+                                      Image.asset(
+                                        'assets/images/ic_google.png',
+                                        width: 20,
+                                        height: 20,
                                       ),
                                       const SizedBox(width: 12),
                                       Text(

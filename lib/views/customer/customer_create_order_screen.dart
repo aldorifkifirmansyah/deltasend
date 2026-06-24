@@ -50,13 +50,11 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
   int _currentStep = 1;
 
   static const Color _primaryBlue = Color(0xFF133D87);
-  static const Color _titleBlue = Color(0xFF608BC0);
   static const Color _textDark = Color(0xFF1A1D23);
   static const Color _textGrey = Color(0xFF6F7784);
   static const Color _borderBlue = Color(0xFFC5D8EE);
   static const Color _pickupBlue = Color(0xFF133D87);
   static const Color _destinationRed = Color(0xFFFF4A45);
-  static const Color _successGreen = Color(0xFF0AAA55);
 
   @override
   void initState() {
@@ -375,7 +373,7 @@ class _CustomerCreateOrderScreenState extends State<CustomerCreateOrderScreen> {
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: Color(0xFFF7F9FC));
             },
           ),
