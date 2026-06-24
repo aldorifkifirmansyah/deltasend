@@ -8,6 +8,7 @@ import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../utils/app_assets.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../../widgets/edit_name_dialog.dart';
 import '../auth/login_screen.dart';
 import '../chat/chat_screen.dart';
 import '../driver_order_list_screen.dart';
@@ -43,14 +44,223 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _selectedIndex = widget.initialIndex;
   }
 
-  Future<void> _logout() async {
+Future<void> _logout() async {
+  final AuthViewModel auth = context.read<AuthViewModel>();
+
+  if (auth.isLoading) return;
+
+  final bool? confirmed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) {
+      return AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          10,
+        ),
+        contentPadding: const EdgeInsets.fromLTRB(
+          24,
+          0,
+          24,
+          20,
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(
+          20,
+          0,
+          20,
+          18,
+        ),
+        title: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD83A47).withValues(
+                  alpha: 0.10,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Color(0xFFD83A47),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Keluar dari akun?',
+                style: GoogleFonts.inter(
+                  color: const Color(0xFF171717),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Kamu harus login kembali untuk mengakses halaman DeltaSend.',
+          style: GoogleFonts.inter(
+            color: const Color(0xFF697386),
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(false);
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF697386),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 11,
+              ),
+            ),
+            child: Text(
+              'Batal',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(dialogContext).pop(true);
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFEF1745),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 11,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            icon: const Icon(
+              Icons.logout_rounded,
+              size: 18,
+            ),
+            label: Text(
+              'Sign Out',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  if (confirmed != true || !mounted) return;
+
+  try {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const PopScope(
+          canPop: false,
+          child: Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF133D87),
+            ),
+          ),
+        );
+      },
+    );
+
     await context.read<AuthViewModel>().signOut();
 
     if (!mounted) return;
 
+    Navigator.of(
+      context,
+      rootNavigator: true,
+    ).pop();
+
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      PageRouteBuilder<void>(
+        pageBuilder: (
+          context,
+          animation,
+          secondaryAnimation,
+        ) {
+          return const LoginScreen();
+        },
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        transitionsBuilder: (
+          context,
+          animation,
+          secondaryAnimation,
+          child,
+        ) {
+          return child;
+        },
+      ),
       (route) => false,
+    );
+  } catch (error) {
+    if (!mounted) return;
+
+    final NavigatorState rootNavigator =
+        Navigator.of(
+      context,
+      rootNavigator: true,
+    );
+
+    if (rootNavigator.canPop()) {
+      rootNavigator.pop();
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Logout gagal: $error',
+          style: GoogleFonts.inter(),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+  Future<void> _showEditNameDialog(String currentName) async {
+    final String? newName = await showDialog<String>(
+      context: context,
+      builder: (_) => EditNameDialog(initialName: currentName),
+    );
+
+    if (!mounted) return;
+    if (newName == null || newName.isEmpty || newName == currentName) return;
+
+    final auth = context.read<AuthViewModel>();
+    final bool ok = await auth.updateUserName(newName);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Nama berhasil diperbarui'
+              : (auth.errorMessage ?? 'Gagal memperbarui nama'),
+          style: GoogleFonts.inter(),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -207,7 +417,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: _pageBackground);
             },
           ),
@@ -546,7 +756,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           : Image.network(
                               photoUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) {
+                              errorBuilder: (_, _, _) {
                                 return const Icon(
                                   Icons.person_rounded,
                                   color: _primaryBlue,
@@ -649,7 +859,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           style: GoogleFonts.inter(color: _textGrey, fontSize: 14),
         ),
         const SizedBox(height: 28),
-        Container(
+        Stack(
+          children: [
+            Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -708,6 +920,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               ),
             ],
           ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: _titleBlue,
+                ),
+                tooltip: 'Edit nama',
+                onPressed: () => _showEditNameDialog(name),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 90),
         SizedBox(

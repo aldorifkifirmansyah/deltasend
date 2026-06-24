@@ -7,6 +7,8 @@ import '../../models/message_model.dart';
 import '../../services/chat_service.dart';
 import '../../utils/app_assets.dart';
 import '../customer/customer_bottom_bar.dart';
+import '../driver/driver_bottom_bar.dart';
+import '../driver/driver_home_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String orderId;
@@ -44,11 +46,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
   static const Color _textGrey = Color(0xFF6F7784);
 
-  String get _otherUserId => widget.currentUserId == widget.customerId
-      ? widget.driverId
-      : widget.customerId;
+  String get _otherUserId {
+    return _isCustomer ? widget.driverId : widget.customerId;
+  }
 
-  bool get _isCustomer => widget.currentUserId == widget.customerId;
+  bool get _isCustomer {
+    return widget.currentUserId == widget.customerId;
+  }
+
+  bool get _isDriver {
+    return widget.currentUserId == widget.driverId;
+  }
 
   @override
   void initState() {
@@ -78,30 +86,38 @@ class _ChatScreenState extends State<ChatScreen> {
         currentUserId: widget.currentUserId,
       );
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      _showSnackBar(error.toString());
+      _showSnackBar(_cleanErrorMessage(error));
     }
   }
 
   Future<void> _loadOtherUserName() async {
+    if (_otherUserId.trim().isEmpty) {
+      return;
+    }
+
     try {
       final document = await FirebaseFirestore.instance
           .collection('users')
           .doc(_otherUserId)
           .get();
 
-      final String? name = document.data()?['name'] as String?;
+      final Map<String, dynamic>? data = document.data();
 
-      if (!mounted || name == null || name.trim().isEmpty) {
+      final String name = data?['name']?.toString().trim() ?? '';
+
+      if (!mounted || name.isEmpty) {
         return;
       }
 
       setState(() {
-        _otherUserName = name.trim();
+        _otherUserName = name;
       });
     } catch (_) {
-      // Gunakan nama default jika profil gagal dimuat.
+      // Nama default tetap dipakai jika profil gagal dimuat.
     }
   }
 
@@ -127,9 +143,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
       _scrollToBottom();
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      _showSnackBar(error.toString());
+      _messageController.text = message;
+
+      _showSnackBar(_cleanErrorMessage(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -154,12 +174,22 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: GoogleFonts.inter()),
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  String _cleanErrorMessage(Object error) {
+    final String raw = error.toString();
+
+    return raw
+        .replaceFirst('Exception: ', '')
+        .replaceFirst('[cloud_firestore/permission-denied] ', '');
   }
 
   String _formatOrderId(String orderId) {
@@ -175,7 +205,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _formatTime(DateTime? date) {
-    if (date == null) return '';
+    if (date == null) {
+      return '';
+    }
 
     final String hour = date.hour.toString().padLeft(2, '0');
 
@@ -184,21 +216,55 @@ class _ChatScreenState extends State<ChatScreen> {
     return '$hour:$minute';
   }
 
+  void _handleDriverBottomTap(int index) {
+    if (!_isDriver) {
+      return;
+    }
+
+    if (index == 2) {
+      return;
+    }
+
+    Navigator.of(context).pushAndRemoveUntil(
+      PageRouteBuilder<void>(
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return DriverHomeScreen(initialIndex: index);
+        },
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return child;
+        },
+      ),
+      (route) => false,
+    );
+  }
+
+  Widget? _buildBottomNavigation() {
+    if (_isCustomer) {
+      return const CustomerBottomBar(selectedIndex: 2);
+    }
+
+    if (_isDriver) {
+      return DriverBottomBar(selectedIndex: 2, onTap: _handleDriverBottomTap);
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FC),
       extendBody: false,
-      bottomNavigationBar: _isCustomer
-          ? const CustomerBottomBar(selectedIndex: 2)
-          : null,
+      bottomNavigationBar: _buildBottomNavigation(),
       body: Stack(
         fit: StackFit.expand,
         children: [
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (context, error, stackTrace) {
               return const ColoredBox(color: Color(0xFFF7F9FC));
             },
           ),
@@ -301,11 +367,33 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Center(
-            child: Text(
-              'Gagal memuat pesan.',
-              style: GoogleFonts.inter(
-                color: const Color(0xFFD14343),
-                fontSize: 13,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Color(0xFFD14343),
+                    size: 42,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Gagal memuat pesan.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFD14343),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(
+                    _cleanErrorMessage(snapshot.error!),
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(color: _textGrey, fontSize: 11),
+                  ),
+                ],
               ),
             ),
           );
@@ -465,16 +553,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 hintStyle: GoogleFonts.inter(
                   color: const Color(0xFF9BA5B3),
                   fontSize: 12,
-                ),
-                suffixIcon: IconButton(
-                  onPressed: () {
-                    _showSnackBar('Fitur lampiran belum tersedia.');
-                  },
-                  icon: const Icon(
-                    Icons.attach_file_rounded,
-                    color: _textGrey,
-                    size: 21,
-                  ),
                 ),
                 filled: true,
                 fillColor: Colors.white,

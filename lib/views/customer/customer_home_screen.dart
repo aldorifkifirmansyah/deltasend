@@ -7,6 +7,7 @@ import '../../models/order_model.dart';
 import '../../services/order_service.dart';
 import '../../utils/app_assets.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../../widgets/edit_name_dialog.dart';
 import '../auth/login_screen.dart';
 import 'customer_create_order_screen.dart';
 import 'customer_order_detail_screen.dart';
@@ -52,14 +53,144 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Future<void> _logout() async {
-    await context.read<AuthViewModel>().signOut();
-
-    if (!mounted) return;
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
+    final AuthViewModel auth = context.read<AuthViewModel>();
+    if (auth.isLoading) return;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 10),
+          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+          title: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD83A47).withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Color(0xFFD83A47),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Keluar dari akun?',
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF171717),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Kamu harus login kembali untuk mengakses halaman DeltaSend.',
+            style: GoogleFonts.inter(
+              color: const Color(0xFF697386),
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF697386),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 11,
+                ),
+              ),
+              child: Text(
+                'Batal',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFEF1745),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: Text(
+                'Sign Out',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        );
+      },
     );
+    if (confirmed != true || !mounted) return;
+    try {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) {
+          return const PopScope(
+            canPop: false,
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFF133D87)),
+            ),
+          );
+        },
+      );
+      await context.read<AuthViewModel>().signOut();
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      Navigator.of(context).pushAndRemoveUntil(
+        PageRouteBuilder<void>(
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return const LoginScreen();
+          },
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return child;
+          },
+        ),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final NavigatorState rootNavigator = Navigator.of(
+        context,
+        rootNavigator: true,
+      );
+      if (rootNavigator.canPop()) {
+        rootNavigator.pop();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Logout gagal: $error', style: GoogleFonts.inter()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _openCreateOrder() {
@@ -88,6 +219,32 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     ).push(MaterialPageRoute(builder: (_) => RatingScreen(order: order)));
   }
 
+  Future<void> _showEditNameDialog(String currentName) async {
+    final String? newName = await showDialog<String>(
+      context: context,
+      builder: (_) => EditNameDialog(initialName: currentName),
+    );
+
+    if (!mounted) return;
+    if (newName == null || newName.isEmpty || newName == currentName) return;
+
+    final auth = context.read<AuthViewModel>();
+    final bool ok = await auth.updateUserName(newName);
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Nama berhasil diperbarui'
+              : (auth.errorMessage ?? 'Gagal memperbarui nama'),
+          style: GoogleFonts.inter(),
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final AuthViewModel auth = context.watch<AuthViewModel>();
@@ -107,7 +264,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           Image.asset(
             AppAssets.loginBackground,
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
+            errorBuilder: (_, _, _) {
               return const ColoredBox(color: _pageBackground);
             },
           ),
@@ -731,7 +888,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                           : Image.network(
                               photoUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) {
+                              errorBuilder: (_, _, _) {
                                 return const Icon(
                                   Icons.person_rounded,
                                   color: _primaryBlue,
@@ -828,65 +985,82 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           style: GoogleFonts.inter(color: _textGrey, fontSize: 14),
         ),
         const SizedBox(height: 30),
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _borderBlue),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+        Stack(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: _borderBlue),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 78,
-                height: 78,
-                decoration: BoxDecoration(
-                  color: _titleBlue.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
+              child: Column(
+                children: [
+                  Container(
+                    width: 78,
+                    height: 78,
+                    decoration: BoxDecoration(
+                      color: _titleBlue.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: _primaryBlue,
+                      size: 44,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    name,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      color: _textDark,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    email,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(color: _textGrey, fontSize: 13),
+                  ),
+                  const SizedBox(height: 24),
+                  _ProfileInformationRow(
+                    icon: Icons.person_outline_rounded,
+                    label: 'Role',
+                    value: 'Customer',
+                  ),
+                  const Divider(height: 28, color: Color(0xFFE4E9F0)),
+                  _ProfileInformationRow(
+                    icon: Icons.email_outlined,
+                    label: 'Email',
+                    value: email,
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: _titleBlue,
                 ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: _primaryBlue,
-                  size: 44,
-                ),
+                tooltip: 'Edit nama',
+                onPressed: () => _showEditNameDialog(name),
               ),
-              const SizedBox(height: 14),
-              Text(
-                name,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  color: _textDark,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                email,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(color: _textGrey, fontSize: 13),
-              ),
-              const SizedBox(height: 24),
-              _ProfileInformationRow(
-                icon: Icons.person_outline_rounded,
-                label: 'Role',
-                value: 'Customer',
-              ),
-              const Divider(height: 28, color: Color(0xFFE4E9F0)),
-              _ProfileInformationRow(
-                icon: Icons.email_outlined,
-                label: 'Email',
-                value: email,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
         const SizedBox(height: 100),
         SizedBox(
