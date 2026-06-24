@@ -19,62 +19,70 @@ class AdminOrdersScreen extends StatefulWidget {
 class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
 
+  final FocusNode _searchFocusNode = FocusNode();
+
   static const Color _primaryBlue = Color(0xFF133D87);
   static const Color _titleBlue = Color(0xFF608BC0);
-  static const Color _textDark = Color(0xFF1B1B1B);
-  static const Color _textGrey = Color(0xFF687386);
-  static const Color _borderBlue = Color(0xFFC9D9ED);
+  static const Color _textDark = Color(0xFF202832);
+  static const Color _textGrey = Color(0xFF7A8594);
+  static const Color _lightGrey = Color(0xFFF4F7FA);
+  static const Color _borderColor = Color(0xFFD9E4F2);
   static const Color _pageBackground = Color(0xFFF8FAFD);
 
   @override
   void dispose() {
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
-  Color _statusColor(String status) {
+  void _focusSearch() {
+    _searchFocusNode.requestFocus();
+  }
+
+  Color _statusTextColor(String status) {
     switch (status) {
       case 'pending':
-        return const Color(0xFFE08B00);
+        return const Color(0xFFD39A22);
 
       case 'accepted':
       case 'pickingUp':
       case 'delivering':
       case 'onDelivery':
-        return const Color(0xFF0066FF);
+        return const Color(0xFF3B82F6);
 
       case 'completed':
-        return const Color(0xFF0AAA55);
+        return const Color(0xFF22B36A);
 
       case 'cancelled':
       case 'cancel':
-        return const Color(0xFFD14343);
+        return const Color(0xFFE26868);
 
       default:
         return _textGrey;
     }
   }
 
-  Color _statusBackground(String status) {
+  Color _statusBackgroundColor(String status) {
     switch (status) {
       case 'pending':
-        return const Color(0xFFFFF3D8);
+        return const Color(0xFFFFF5DB);
 
       case 'accepted':
       case 'pickingUp':
       case 'delivering':
       case 'onDelivery':
-        return const Color(0xFFE7F0FF);
+        return const Color(0xFFEAF2FF);
 
       case 'completed':
-        return const Color(0xFFE2F9EB);
+        return const Color(0xFFE4FAEC);
 
       case 'cancelled':
       case 'cancel':
-        return const Color(0xFFFFE8E8);
+        return const Color(0xFFFFE8EA);
 
       default:
-        return const Color(0xFFF0F2F5);
+        return const Color(0xFFF1F4F8);
     }
   }
 
@@ -99,8 +107,8 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
             bottom: false,
             child: Column(
               children: [
-                const SizedBox(height: 18),
-                SvgPicture.asset(AppAssets.logo, width: 215),
+                const SizedBox(height: 17),
+                SvgPicture.asset(AppAssets.logo, width: 218),
                 const SizedBox(height: 24),
                 Expanded(
                   child: Container(
@@ -109,42 +117,27 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
+                        top: Radius.circular(30),
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.10),
-                          blurRadius: 18,
+                          blurRadius: 20,
                           offset: const Offset(0, 5),
                         ),
                       ],
                     ),
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
+                        top: Radius.circular(30),
                       ),
                       child: ListView(
-                        padding: const EdgeInsets.fromLTRB(22, 28, 22, 120),
+                        padding: const EdgeInsets.fromLTRB(20, 32, 20, 120),
                         children: [
-                          Text(
-                            'Orders',
-                            style: GoogleFonts.getFont(
-                              'ADLaM Display',
-                              color: _titleBlue,
-                              fontSize: 24,
-                            ),
-                          ),
-                          const SizedBox(height: 7),
-                          Text(
-                            'Pantau seluruh order DeltaSend.',
-                            style: GoogleFonts.inter(
-                              color: _textGrey,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 22),
+                          _buildTopHeader(),
+                          const SizedBox(height: 30),
                           _buildSearchField(admin),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 22),
                           _buildFilterList(admin),
                           const SizedBox(height: 20),
                           _buildOrderList(admin),
@@ -162,41 +155,86 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
     );
   }
 
+  Widget _buildTopHeader() {
+    return SizedBox(
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Center(
+            child: Text(
+              'Orders',
+              style: GoogleFonts.inter(
+                color: _textDark,
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            child: IconButton(
+              onPressed: _focusSearch,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+              icon: const Icon(
+                Icons.search_rounded,
+                color: Color(0xFF111820),
+                size: 33,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSearchField(AdminViewModel admin) {
     return TextField(
       controller: _searchController,
+      focusNode: _searchFocusNode,
       onChanged: (value) {
         admin.changeOrderSearchQuery(value);
         setState(() {});
       },
+      style: GoogleFonts.inter(color: _textDark, fontSize: 13),
       decoration: InputDecoration(
-        hintText: 'Cari order, alamat, atau barang',
-        hintStyle: GoogleFonts.inter(color: _textGrey, fontSize: 12),
-        prefixIcon: const Icon(Icons.search_rounded, color: _titleBlue),
+        hintText: 'Search order, item, or address...',
+        hintStyle: GoogleFonts.inter(
+          color: const Color(0xFFB2BAC6),
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        prefixIcon: const Padding(
+          padding: EdgeInsets.only(left: 15, right: 10),
+          child: Icon(Icons.search_rounded, color: Color(0xFF95A1AE), size: 25),
+        ),
+        prefixIconConstraints: const BoxConstraints(minWidth: 50),
         suffixIcon: _searchController.text.isEmpty
             ? null
             : IconButton(
                 onPressed: () {
                   _searchController.clear();
                   admin.changeOrderSearchQuery('');
+
                   setState(() {});
                 },
-                icon: const Icon(Icons.close_rounded),
+                icon: const Icon(Icons.close_rounded, color: _textGrey),
               ),
         filled: true,
-        fillColor: const Color(0xFFF8FAFD),
-        contentPadding: const EdgeInsets.symmetric(vertical: 15),
+        fillColor: _lightGrey,
+        contentPadding: const EdgeInsets.symmetric(vertical: 19),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _borderBlue),
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _borderBlue),
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _primaryBlue, width: 1.4),
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: _titleBlue, width: 1.2),
         ),
       ),
     );
@@ -285,116 +323,142 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
           );
         }
 
-        return Column(
-          children: orders.map((document) {
-            final Map<String, dynamic> data = document.data();
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _borderColor),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.025),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: orders.length,
+            separatorBuilder: (context, index) {
+              return Divider(
+                height: 18,
+                thickness: 1,
+                color: Colors.grey.withValues(alpha: 0.16),
+              );
+            },
+            itemBuilder: (context, index) {
+              final document = orders[index];
 
-            final String itemName =
-                data['item_description']?.toString().trim().isNotEmpty == true
-                ? data['item_description'].toString().trim()
-                : 'Paket';
+              final Map<String, dynamic> data = document.data();
 
-            final String pickupAddress =
-                data['pickup_address']?.toString() ?? '-';
+              final String status = data['status']?.toString() ?? '';
 
-            final String destinationAddress =
-                (data['dest_address'] ?? data['destination_address'] ?? '-')
-                    .toString();
+              final String itemName =
+                  data['item_description']?.toString().trim().isNotEmpty == true
+                  ? data['item_description'].toString().trim()
+                  : 'Paket';
 
-            final String status = data['status']?.toString() ?? '';
+              final String pickupAddress =
+                  data['pickup_address']?.toString().trim().isNotEmpty == true
+                  ? data['pickup_address'].toString().trim()
+                  : '-';
 
-            final dynamic totalCost =
-                data['total_cost'] ??
-                data['shipping_cost'] ??
-                data['price'] ??
-                0;
+              final String destinationAddress =
+                  (data['dest_address'] ?? data['destination_address'])
+                          ?.toString()
+                          .trim()
+                          .isNotEmpty ==
+                      true
+                  ? (data['dest_address'] ?? data['destination_address'])
+                        .toString()
+                        .trim()
+                  : '-';
 
-            final String shortId = document.id.length > 8
-                ? document.id.substring(0, 8).toUpperCase()
-                : document.id.toUpperCase();
+              final dynamic totalCost =
+                  data['total_cost'] ??
+                  data['shipping_cost'] ??
+                  data['price'] ??
+                  0;
 
-            return _buildOrderCard(
-              orderId: document.id,
-              shortId: shortId,
-              itemName: itemName,
-              pickupAddress: pickupAddress,
-              destinationAddress: destinationAddress,
-              status: status,
-              totalCost: admin.formatCurrency(totalCost),
-              date: admin.formatDate(data['created_at']),
-              time: admin.formatTime(data['created_at']),
-              statusLabel: admin.statusLabel(status),
-            );
-          }).toList(),
+              final String shortId = document.id.length > 8
+                  ? document.id.substring(0, 8).toUpperCase()
+                  : document.id.toUpperCase();
+
+              return _buildOrderItem(
+                context: context,
+                orderId: document.id,
+                shortId: shortId,
+                itemName: itemName,
+                pickupAddress: pickupAddress,
+                destinationAddress: destinationAddress,
+                status: status,
+                statusLabel: admin.statusLabel(status),
+                totalCost: admin.formatCurrency(totalCost),
+                date: admin.formatDate(data['created_at']),
+                time: admin.formatTime(data['created_at']),
+              );
+            },
+          ),
         );
       },
     );
   }
 
-  Widget _buildOrderCard({
+  Widget _buildOrderItem({
+    required BuildContext context,
     required String orderId,
     required String shortId,
     required String itemName,
     required String pickupAddress,
     required String destinationAddress,
     required String status,
+    required String statusLabel,
     required String totalCost,
     required String date,
     required String time,
-    required String statusLabel,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 13),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: _borderBlue),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(15),
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => AdminOrderDetailScreen(orderId: orderId),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => AdminOrderDetailScreen(orderId: orderId),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F6FC),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: _primaryBlue,
+                  size: 28,
+                ),
               ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 43,
-                      height: 43,
-                      decoration: BoxDecoration(
-                        color: _titleBlue.withValues(alpha: 0.13),
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: const Icon(
-                        Icons.inventory_2_outlined,
-                        color: _primaryBlue,
-                        size: 23,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            itemName,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '#ORD-$shortId',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
@@ -403,112 +467,147 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '#ORD-$shortId',
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _statusBackgroundColor(status),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text(
+                            statusLabel,
+                            style: GoogleFonts.inter(
+                              color: _statusTextColor(status),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      itemName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        color: _textGrey,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                    const SizedBox(height: 11),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 1),
+                          child: Icon(
+                            Icons.trip_origin_rounded,
+                            color: Color(0xFF22B36A),
+                            size: 15,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            pickupAddress,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
                               color: _textGrey,
                               fontSize: 11.5,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _statusBackground(status),
-                        borderRadius: BorderRadius.circular(13),
-                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 1),
+                          child: Icon(
+                            Icons.location_on_rounded,
+                            color: Color(0xFFE25C5C),
+                            size: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            destinationAddress,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              color: _textGrey,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 11),
+                    Row(
+                      children: [
+                        Container(
+                          width: 27,
+                          height: 27,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF4FF),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.payments_outlined,
+                            color: _primaryBlue,
+                            size: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            totalCost,
+                            style: GoogleFonts.inter(
+                              color: _primaryBlue,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          time,
+                          style: GoogleFonts.inter(
+                            color: _textGrey,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Color(0xFFACB5C1),
+                          size: 24,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
                       child: Text(
-                        statusLabel,
+                        date,
                         style: GoogleFonts.inter(
-                          color: _statusColor(status),
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFB0B8C3),
+                          fontSize: 10,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.trip_origin_rounded,
-                      color: Color(0xFF0AAA55),
-                      size: 15,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        pickupAddress,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          color: _textGrey,
-                          fontSize: 11.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 7),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.location_on_rounded,
-                      color: Color(0xFFFF4A45),
-                      size: 16,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        destinationAddress,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          color: _textGrey,
-                          fontSize: 11.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Text(
-                      totalCost,
-                      style: GoogleFonts.inter(
-                        color: _primaryBlue,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '$date • $time',
-                      style: GoogleFonts.inter(
-                        color: _textGrey,
-                        fontSize: 10.5,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: _titleBlue,
-                      size: 20,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -518,20 +617,20 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
   Widget _buildMessageCard({required IconData icon, required String text}) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 36),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFD),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: _borderBlue),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _borderColor),
       ),
       child: Column(
         children: [
-          Icon(icon, color: _titleBlue, size: 40),
-          const SizedBox(height: 10),
+          Icon(icon, color: _titleBlue, size: 42),
+          const SizedBox(height: 12),
           Text(
             text,
             textAlign: TextAlign.center,
-            style: GoogleFonts.inter(color: _textGrey, fontSize: 13),
+            style: GoogleFonts.inter(color: _textGrey, fontSize: 13.5),
           ),
         ],
       ),
@@ -553,21 +652,45 @@ class _OrderFilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(right: 9),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) {
-          onTap();
-        },
-        showCheckmark: false,
-        selectedColor: const Color(0xFF133D87),
-        backgroundColor: Colors.white,
-        side: const BorderSide(color: Color(0xFF133D87)),
-        labelStyle: GoogleFonts.inter(
-          color: selected ? Colors.white : const Color(0xFF133D87),
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
+      padding: const EdgeInsets.only(right: 10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+            decoration: BoxDecoration(
+              color: selected ? const Color(0xFFEFF5FF) : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFF7597C4)
+                    : const Color(0xFFE5EAF1),
+                width: selected ? 1.5 : 1,
+              ),
+              boxShadow: selected
+                  ? const []
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+            ),
+            child: Text(
+              label,
+              style: GoogleFonts.inter(
+                color: selected
+                    ? const Color(0xFF1E4D8F)
+                    : const Color(0xFF6B7380),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ),
       ),
     );

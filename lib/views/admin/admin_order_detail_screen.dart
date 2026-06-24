@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import '../../utils/app_assets.dart';
 import '../../viewmodels/admin_viewmodel.dart';
+import 'admin_bottom_bar.dart';
 
 class AdminOrderDetailScreen extends StatelessWidget {
   final String orderId;
@@ -17,9 +18,9 @@ class AdminOrderDetailScreen extends StatelessWidget {
 
   static const Color _primaryBlue = Color(0xFF133D87);
   static const Color _titleBlue = Color(0xFF608BC0);
-  static const Color _textDark = Color(0xFF1B1B1B);
-  static const Color _textGrey = Color(0xFF687386);
-  static const Color _borderBlue = Color(0xFFC9D9ED);
+  static const Color _textDark = Color(0xFF202832);
+  static const Color _textGrey = Color(0xFF8A929C);
+  static const Color _borderColor = Color(0xFFD8E4F0);
   static const Color _pageBackground = Color(0xFFF8FAFD);
 
   @override
@@ -28,6 +29,7 @@ class AdminOrderDetailScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: _pageBackground,
+      extendBody: true,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -39,28 +41,12 @@ class AdminOrderDetailScreen extends StatelessWidget {
             },
           ),
           SafeArea(
+            bottom: false,
             child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        icon: const Icon(
-                          Icons.arrow_back_rounded,
-                          color: _primaryBlue,
-                        ),
-                      ),
-                      const Spacer(),
-                      SvgPicture.asset(AppAssets.logo, width: 175),
-                      const Spacer(),
-                      const SizedBox(width: 48),
-                    ],
-                  ),
-                ),
+                const SizedBox(height: 17),
+                SvgPicture.asset(AppAssets.logo, width: 218),
+                const SizedBox(height: 24),
                 Expanded(
                   child: Container(
                     width: double.infinity,
@@ -68,19 +54,19 @@ class AdminOrderDetailScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
+                        top: Radius.circular(30),
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.10),
-                          blurRadius: 18,
+                          blurRadius: 20,
                           offset: const Offset(0, 5),
                         ),
                       ],
                     ),
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
+                        top: Radius.circular(30),
                       ),
                       child:
                           StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -111,13 +97,6 @@ class AdminOrderDetailScreen extends StatelessWidget {
                               final Map<String, dynamic> data =
                                   snapshot.data!.data() ?? {};
 
-                              final String shortId = orderId.length > 8
-                                  ? orderId.substring(0, 8).toUpperCase()
-                                  : orderId.toUpperCase();
-
-                              final String status =
-                                  data['status']?.toString() ?? '';
-
                               final String customerId =
                                   data['customer_id']?.toString() ?? '';
 
@@ -135,49 +114,34 @@ class AdminOrderDetailScreen extends StatelessWidget {
                               return ListView(
                                 padding: const EdgeInsets.fromLTRB(
                                   24,
-                                  30,
+                                  25,
                                   24,
-                                  45,
+                                  120,
                                 ),
                                 children: [
-                                  Text(
-                                    'Order Detail',
-                                    style: GoogleFonts.getFont(
-                                      'ADLaM Display',
-                                      color: _titleBlue,
-                                      fontSize: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 7),
-                                  Text(
-                                    '#ORD-$shortId',
-                                    style: GoogleFonts.inter(
-                                      color: _textGrey,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  _buildOrderSummary(
+                                  _buildHeader(context),
+                                  const SizedBox(height: 28),
+
+                                  _CustomerHeaderCard(userId: customerId),
+
+                                  const SizedBox(height: 18),
+
+                                  _buildOrderInformation(
                                     admin: admin,
                                     data: data,
-                                    status: status,
                                   ),
-                                  const SizedBox(height: 16),
-                                  _buildLocationCard(data),
-                                  const SizedBox(height: 16),
-                                  _UserInformationCard(
-                                    title: 'Customer Information',
-                                    userId: customerId,
-                                    icon: Icons.person_outline_rounded,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  _UserInformationCard(
-                                    title: 'Driver Information',
-                                    userId: driverId,
-                                    icon: Icons.delivery_dining_rounded,
-                                  ),
+
+                                  const SizedBox(height: 18),
+
+                                  _buildDeliveryLocation(data),
+
+                                  if (driverId.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 18),
+                                    _DriverInformationCard(driverId: driverId),
+                                  ],
+
                                   if (proofValue.trim().isNotEmpty) ...[
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: 18),
                                     _buildProofCard(proofValue),
                                   ],
                                 ],
@@ -192,89 +156,154 @@ class AdminOrderDetailScreen extends StatelessWidget {
           ),
         ],
       ),
+      bottomNavigationBar: const AdminBottomBar(selectedIndex: 2),
     );
   }
 
-  Widget _buildOrderSummary({
+  Widget _buildHeader(BuildContext context) {
+    return SizedBox(
+      height: 42,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: 0,
+            child: IconButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Color(0xFF111820),
+                size: 26,
+              ),
+            ),
+          ),
+          Center(
+            child: Text(
+              'Order Detail',
+              style: GoogleFonts.inter(
+                color: _textDark,
+                fontSize: 21,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrderInformation({
     required AdminViewModel admin,
     required Map<String, dynamic> data,
-    required String status,
   }) {
-    return _DetailSection(
-      title: 'Order Information',
-      icon: Icons.inventory_2_outlined,
+    final String item =
+        data['item_description']?.toString().trim().isNotEmpty == true
+        ? data['item_description'].toString().trim()
+        : 'Paket';
+
+    final String weight =
+        (data['weight_category_name'] ??
+                data['weight_category'] ??
+                data['weight'] ??
+                '-')
+            .toString();
+
+    final dynamic distance = data['distance_km'] ?? data['distance'] ?? 0;
+
+    final dynamic totalCost =
+        data['total_cost'] ??
+        data['shipping_cost'] ??
+        data['delivery_fee'] ??
+        data['price'] ??
+        0;
+
+    final String status = data['status']?.toString() ?? '-';
+
+    return _SectionCard(
+      title: 'Order Info',
       children: [
-        _InformationRow(
-          label: 'Item',
-          value: data['item_description']?.toString() ?? 'Paket',
-        ),
-        _InformationRow(label: 'Status', value: admin.statusLabel(status)),
-        _InformationRow(
-          label: 'Weight Category',
-          value:
-              (data['weight_category_name'] ?? data['weight_category'] ?? '-')
-                  .toString(),
-        ),
-        _InformationRow(
-          label: 'Distance',
-          value: admin.formatDistanceText(
-            data['distance_km'] ?? data['distance'] ?? 0,
-          ),
-        ),
-        _InformationRow(
-          label: 'Shipping Cost',
-          value: admin.formatCurrency(
-            data['shipping_cost'] ?? data['delivery_fee'] ?? 0,
-          ),
-        ),
-        _InformationRow(
+        _InfoRow(label: 'Item', value: item),
+        _InfoRow(label: 'Weight', value: weight),
+        _InfoRow(label: 'Distance', value: admin.formatDistanceText(distance)),
+        _InfoRow(label: 'Status', value: admin.statusLabel(status)),
+        _InfoRow(
           label: 'Total Cost',
-          value: admin.formatCurrency(data['total_cost'] ?? data['price'] ?? 0),
-        ),
-        _InformationRow(
-          label: 'Created',
-          value:
-              '${admin.formatDate(data['created_at'])} ${admin.formatTime(data['created_at'])}',
+          value: admin.formatCurrency(totalCost),
+          valueColor: _primaryBlue,
+          boldValue: true,
+          bottomPadding: 0,
         ),
       ],
     );
   }
 
-  Widget _buildLocationCard(Map<String, dynamic> data) {
+  Widget _buildDeliveryLocation(Map<String, dynamic> data) {
     final String pickupAddress = data['pickup_address']?.toString() ?? '-';
 
     final String destinationAddress =
         (data['dest_address'] ?? data['destination_address'] ?? '-').toString();
 
-    return _DetailSection(
+    return _SectionCard(
       title: 'Delivery Location',
-      icon: Icons.route_rounded,
       children: [
         _LocationRow(
           icon: Icons.trip_origin_rounded,
-          iconColor: const Color(0xFF0AAA55),
+          color: const Color(0xFF20B86B),
           label: 'Pickup',
-          address: pickupAddress,
+          value: pickupAddress,
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 18),
         _LocationRow(
           icon: Icons.location_on_rounded,
-          iconColor: const Color(0xFFFF4A45),
+          color: const Color(0xFFE85B5B),
           label: 'Destination',
-          address: destinationAddress,
+          value: destinationAddress,
         ),
       ],
     );
   }
 
   Widget _buildProofCard(String proofValue) {
-    return _DetailSection(
+    return _SectionCard(
       title: 'Proof of Delivery',
-      icon: Icons.image_outlined,
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: _buildProofImage(proofValue),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 25,
+              height: 25,
+              decoration: const BoxDecoration(
+                color: Color(0xFF20B86B),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.verified_rounded,
+                color: Colors.white,
+                size: 17,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Foto ini diambil oleh driver sebagai bukti bahwa paket telah selesai dikirim.',
+                style: GoogleFonts.inter(
+                  color: _textGrey,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -287,7 +316,7 @@ class AdminOrderDetailScreen extends StatelessWidget {
       return Image.network(
         cleanValue,
         width: double.infinity,
-        height: 220,
+        height: 270,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return _proofError();
@@ -305,7 +334,7 @@ class AdminOrderDetailScreen extends StatelessWidget {
       return Image.memory(
         bytes,
         width: double.infinity,
-        height: 220,
+        height: 270,
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           return _proofError();
@@ -319,13 +348,13 @@ class AdminOrderDetailScreen extends StatelessWidget {
   Widget _proofError() {
     return Container(
       width: double.infinity,
-      height: 150,
+      height: 170,
       color: const Color(0xFFF4F6F9),
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.broken_image_outlined, color: _textGrey, size: 38),
+          const Icon(Icons.broken_image_outlined, color: _textGrey, size: 40),
           const SizedBox(height: 8),
           Text(
             'Foto bukti tidak dapat dimuat.',
@@ -357,26 +386,19 @@ class AdminOrderDetailScreen extends StatelessWidget {
   }
 }
 
-class _UserInformationCard extends StatelessWidget {
-  final String title;
+class _CustomerHeaderCard extends StatelessWidget {
   final String userId;
-  final IconData icon;
 
-  const _UserInformationCard({
-    required this.title,
-    required this.userId,
-    required this.icon,
-  });
+  const _CustomerHeaderCard({required this.userId});
 
   @override
   Widget build(BuildContext context) {
     if (userId.trim().isEmpty) {
-      return _DetailSection(
-        title: title,
-        icon: icon,
-        children: const [
-          _InformationRow(label: 'Status', value: 'Belum tersedia'),
-        ],
+      return const _PersonHeaderCard(
+        name: 'Customer tidak tersedia',
+        email: '-',
+        photoUrl: '',
+        trailingIcon: Icons.person_outline_rounded,
       );
     }
 
@@ -386,38 +408,74 @@ class _UserInformationCard extends StatelessWidget {
           .doc(userId)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting &&
-            !snapshot.hasData) {
-          return _DetailSection(
-            title: title,
-            icon: icon,
-            children: const [
-              Center(
-                child: Padding(
-                  padding: EdgeInsets.all(14),
-                  child: CircularProgressIndicator(color: Color(0xFF133D87)),
-                ),
-              ),
-            ],
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            height: 118,
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFF133D87)),
+            ),
           );
         }
 
         final Map<String, dynamic> data = snapshot.data?.data() ?? {};
 
-        final String name = data['name']?.toString() ?? '-';
+        final String name = data['name']?.toString().trim().isNotEmpty == true
+            ? data['name'].toString().trim()
+            : 'Customer';
+
+        final String email = data['email']?.toString() ?? '-';
+
+        final String photoUrl = (data['photo_url'] ?? data['photoUrl'] ?? '')
+            .toString();
+
+        return _PersonHeaderCard(
+          name: name,
+          email: email,
+          photoUrl: photoUrl,
+          trailingIcon: Icons.account_circle_outlined,
+        );
+      },
+    );
+  }
+}
+
+class _DriverInformationCard extends StatelessWidget {
+  final String driverId;
+
+  const _DriverInformationCard({required this.driverId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(driverId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            height: 110,
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFF133D87)),
+            ),
+          );
+        }
+
+        final Map<String, dynamic> data = snapshot.data?.data() ?? {};
+
+        final String name = data['name']?.toString() ?? 'Driver';
 
         final String email = data['email']?.toString() ?? '-';
 
         final String phone = (data['phone'] ?? data['phone_number'] ?? '-')
             .toString();
 
-        return _DetailSection(
-          title: title,
-          icon: icon,
+        return _SectionCard(
+          title: 'Driver Information',
           children: [
-            _InformationRow(label: 'Name', value: name),
-            _InformationRow(label: 'Email', value: email),
-            _InformationRow(label: 'Phone', value: phone),
+            _InfoRow(label: 'Name', value: name),
+            _InfoRow(label: 'Email', value: email),
+            _InfoRow(label: 'Phone', value: phone, bottomPadding: 0),
           ],
         );
       },
@@ -425,28 +483,116 @@ class _UserInformationCard extends StatelessWidget {
   }
 }
 
-class _DetailSection extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final List<Widget> children;
+class _PersonHeaderCard extends StatelessWidget {
+  final String name;
+  final String email;
+  final String photoUrl;
+  final IconData trailingIcon;
 
-  const _DetailSection({
-    required this.title,
-    required this.icon,
-    required this.children,
+  const _PersonHeaderCard({
+    required this.name,
+    required this.email,
+    required this.photoUrl,
+    required this.trailingIcon,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: const Color(0xFFC9D9ED)),
+        border: Border.all(color: const Color(0xFFD8E4F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            clipBehavior: Clip.antiAlias,
+            decoration: const BoxDecoration(
+              color: Color(0xFFDCEEFF),
+              shape: BoxShape.circle,
+            ),
+            child: photoUrl.trim().isEmpty
+                ? const Icon(
+                    Icons.person_rounded,
+                    color: Color(0xFF133D87),
+                    size: 38,
+                  )
+                : Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(
+                        Icons.person_rounded,
+                        color: Color(0xFF133D87),
+                        size: 38,
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(width: 17),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF202832),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF8A929C),
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(trailingIcon, color: const Color(0xFF133D87), size: 34),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _SectionCard({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 21, 20, 22),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0xFFD8E4F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -455,21 +601,15 @@ class _DetailSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icon, color: const Color(0xFF133D87), size: 22),
-              const SizedBox(width: 9),
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  color: const Color(0xFF133D87),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          Text(
+            title,
+            style: GoogleFonts.inter(
+              color: const Color(0xFF202832),
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 22),
           ...children,
         ],
       ),
@@ -477,16 +617,25 @@ class _DetailSection extends StatelessWidget {
   }
 }
 
-class _InformationRow extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
   final String label;
   final String value;
+  final Color? valueColor;
+  final bool boldValue;
+  final double bottomPadding;
 
-  const _InformationRow({required this.label, required this.value});
+  const _InfoRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+    this.boldValue = false,
+    this.bottomPadding = 18,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.only(bottom: bottomPadding),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -495,18 +644,19 @@ class _InformationRow extends StatelessWidget {
             child: Text(
               label,
               style: GoogleFonts.inter(
-                color: const Color(0xFF687386),
-                fontSize: 12,
+                color: const Color(0xFF8A929C),
+                fontSize: 12.5,
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
+              textAlign: TextAlign.right,
               style: GoogleFonts.inter(
-                color: const Color(0xFF1B1B1B),
+                color: valueColor ?? const Color(0xFF333A43),
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
+                fontWeight: boldValue ? FontWeight.w800 : FontWeight.w600,
               ),
             ),
           ),
@@ -518,15 +668,15 @@ class _InformationRow extends StatelessWidget {
 
 class _LocationRow extends StatelessWidget {
   final IconData icon;
-  final Color iconColor;
+  final Color color;
   final String label;
-  final String address;
+  final String value;
 
   const _LocationRow({
     required this.icon,
-    required this.iconColor,
+    required this.color,
     required this.label,
-    required this.address,
+    required this.value,
   });
 
   @override
@@ -534,7 +684,7 @@ class _LocationRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: iconColor, size: 21),
+        Icon(icon, color: color, size: 20),
         const SizedBox(width: 11),
         Expanded(
           child: Column(
@@ -543,16 +693,16 @@ class _LocationRow extends StatelessWidget {
               Text(
                 label,
                 style: GoogleFonts.inter(
-                  color: const Color(0xFF687386),
+                  color: const Color(0xFF8A929C),
                   fontSize: 11.5,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 5),
               Text(
-                address,
+                value,
                 style: GoogleFonts.inter(
-                  color: const Color(0xFF1B1B1B),
-                  fontSize: 13,
+                  color: const Color(0xFF333A43),
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w600,
                   height: 1.4,
                 ),

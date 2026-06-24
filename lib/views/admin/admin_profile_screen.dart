@@ -79,7 +79,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
             ],
           ),
           content: Text(
-            'Kamu harus login kembali untuk mengakses halaman admin DeltaSend.',
+            'Kamu harus login kembali untuk '
+            'mengakses halaman admin DeltaSend.',
             style: GoogleFonts.inter(
               color: _textGrey,
               fontSize: 13,
@@ -138,23 +139,18 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     });
 
     try {
-      await context.read<AuthViewModel>().signOut();
+      final AuthViewModel auth = context.read<AuthViewModel>();
+
+      await auth.signOut();
 
       if (!mounted) {
         return;
       }
 
-      Navigator.of(context).pushAndRemoveUntil(
-        PageRouteBuilder<void>(
-          pageBuilder: (context, animation, secondaryAnimation) {
-            return const LoginScreen();
-          },
-          transitionDuration: Duration.zero,
-          reverseTransitionDuration: Duration.zero,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return child;
-          },
-        ),
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
         (route) => false,
       );
     } catch (error) {
@@ -340,7 +336,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
                                     )
                                   : const Icon(Icons.logout_rounded, size: 21),
                               label: Text(
-                                'SIGN OUT',
+                                _isLoggingOut ? 'SIGNING OUT...' : 'SIGN OUT',
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
