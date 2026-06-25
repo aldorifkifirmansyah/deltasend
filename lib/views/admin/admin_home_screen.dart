@@ -279,13 +279,18 @@ class AdminHomeScreen extends StatelessWidget {
       );
     }
 
-    return GridView.count(
-      crossAxisCount: 2,
+    return GridView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
-      childAspectRatio: 1.35,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        // Tinggi card tetap (bukan childAspectRatio yang ikut lebar device).
+        // Konten Column: icon row 40 + gap 10 + title 2 baris (~27.6) + gap 2
+        // + value 24 + padding 30 ≈ 133.6 → 142 beri margin ~8px.
+        mainAxisExtent: 142,
+      ),
       children: [
         _DashboardCard(
           title: 'Total\nOrders',
@@ -569,50 +574,50 @@ class _DashboardCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: borderColor, width: 1.2),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 55,
-                height: 74,
-                decoration: BoxDecoration(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: iconBackgroundColor,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Icon(icon, color: Colors.white, size: 20),
+                  ),
+                  if (onTap != null)
+                    const Icon(
+                      Icons.chevron_right_rounded,
+                      color: Color(0xFF5D7794),
+                      size: 18,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                title.replaceAll('\n', ' '),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  color: const Color(0xFF21456F),
+                  fontSize: 12,
+                  height: 1.15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value.toString(),
+                style: GoogleFonts.inter(
                   color: iconBackgroundColor,
-                  borderRadius: BorderRadius.circular(9),
+                  fontSize: 24,
+                  height: 1,
+                  fontWeight: FontWeight.w500,
                 ),
-                child: Icon(icon, color: Colors.white, size: 30),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFF21456F),
-                        fontSize: 12,
-                        height: 1.05,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      value.toString(),
-                      style: GoogleFonts.inter(
-                        color: iconBackgroundColor,
-                        fontSize: 28,
-                        height: 1,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: Color(0xFF5D7794),
-                size: 22,
               ),
             ],
           ),
